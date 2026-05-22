@@ -1,0 +1,577 @@
+@import "tailwindcss";
+
+/* ============================================
+   VADODARA SMART CITY — DESIGN SYSTEM
+   Futuristic Theme Command Center
+   Light + Dark mode support via data-theme
+   ============================================ */
+
+@theme {
+  --color-neon-cyan: #06b6d4;
+  --color-neon-blue: #3b82f6;
+  --color-neon-green: #10b981;
+  --color-neon-red: #ef4444;
+  --color-neon-amber: #f59e0b;
+  --color-neon-purple: #8b5cf6;
+
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+/* ============================================
+   THEME TOKENS (Dark mode — default)
+   ============================================ */
+:root {
+  --primary-glow: rgba(6, 182, 212, 0.5);
+
+  --t-bg-body: #0a0e1a;
+  --t-bg-surface: rgba(17, 24, 39, 0.7);
+  --t-bg-glass: rgba(17, 24, 39, 0.5);
+  --t-bg-elevated: rgba(15, 23, 42, 0.6);
+  --t-bg-input: rgba(15, 23, 42, 0.9);
+  --t-bg-muted: rgba(55, 65, 81, 0.3);
+  --t-bg-inset: rgba(17, 24, 39, 0.4);
+
+  --t-border: rgba(55, 65, 81, 0.5);
+  --t-border-subtle: rgba(55, 65, 81, 0.2);
+  --t-border-glow: rgba(6, 182, 212, 0.3);
+
+  --t-text-primary: #f1f5f9;
+  --t-text-secondary: #94a3b8;
+  --t-text-muted: #64748b;
+  --t-text-inverted: #0f172a;
+
+  --t-header-bg: linear-gradient(90deg, rgba(8,15,29,0.96) 0%, rgba(11,19,36,0.96) 55%, rgba(8,15,29,0.96) 100%);
+  --t-sidebar-bg: linear-gradient(180deg, rgba(4,10,24,0.92) 0%, rgba(7,18,34,0.94) 48%, rgba(4,10,24,0.98) 100%);
+  --t-right-panel-bg: linear-gradient(180deg, #031017 0%, #041526 50%, #03101a 100%);
+  --t-dashboard-wrapper: rgba(6, 11, 22, 0.35);
+  --t-dashboard-inner: rgba(15, 23, 42, 0.2);
+
+  --t-card-hover-shadow: rgba(6, 182, 212, 0.10);
+  --t-tooltip-bg: rgba(17, 24, 39, 0.95);
+  --t-overlay: rgba(0, 0, 0, 0.6);
+
+  --t-body-gradient: linear-gradient(180deg, #08111e 0%, #0b1324 48%, #050814 100%);
+  --t-body-radial1: radial-gradient(circle at 20% 20%, rgba(34, 211, 238, 0.10), transparent 28%);
+  --t-body-radial2: radial-gradient(circle at 80% 0%, rgba(59, 130, 246, 0.10), transparent 24%);
+}
+
+/* ============================================
+   THEME TOKENS (Light mode)
+   ============================================ */
+[data-theme='light'] {
+  --primary-glow: rgba(6, 182, 212, 0.3);
+
+  --t-bg-body: #f8fafc;
+  --t-bg-surface: rgba(255, 255, 255, 0.85);
+  --t-bg-glass: rgba(255, 255, 255, 0.7);
+  --t-bg-elevated: rgba(241, 245, 249, 0.9);
+  --t-bg-input: rgba(255, 255, 255, 0.95);
+  --t-bg-muted: rgba(203, 213, 225, 0.35);
+  --t-bg-inset: rgba(241, 245, 249, 0.6);
+
+  --t-border: rgba(203, 213, 225, 0.6);
+  --t-border-subtle: rgba(203, 213, 225, 0.3);
+  --t-border-glow: rgba(6, 182, 212, 0.2);
+
+  --t-text-primary: #0f172a;
+  --t-text-secondary: #475569;
+  --t-text-muted: #64748b;
+  --t-text-inverted: #f1f5f9;
+
+  --t-header-bg: linear-gradient(90deg, rgba(248,250,252,0.97) 0%, rgba(241,245,249,0.97) 55%, rgba(248,250,252,0.97) 100%);
+  --t-sidebar-bg: linear-gradient(180deg, rgba(248,250,252,0.98) 0%, rgba(241,245,249,0.98) 48%, rgba(248,250,252,0.99) 100%);
+  --t-right-panel-bg: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 50%, #f8fafc 100%);
+  --t-dashboard-wrapper: rgba(255, 255, 255, 0.5);
+  --t-dashboard-inner: rgba(241, 245, 249, 0.5);
+
+  --t-card-hover-shadow: rgba(6, 182, 212, 0.08);
+  --t-tooltip-bg: rgba(255, 255, 255, 0.95);
+  --t-overlay: rgba(255, 255, 255, 0.6);
+
+  --t-body-gradient: linear-gradient(180deg, #f8fbff 0%, #edf5ff 45%, #f8fafc 100%);
+  --t-body-radial1: radial-gradient(circle at 20% 20%, rgba(34, 211, 238, 0.06), transparent 28%);
+  --t-body-radial2: radial-gradient(circle at 80% 0%, rgba(59, 130, 246, 0.06), transparent 24%);
+}
+
+
+/* ============================================
+   BASE RESET & GLOBALS
+   ============================================ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--t-bg-body);
+  color: var(--t-text-primary);
+  min-height: 100vh;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-image: var(--t-body-radial1), var(--t-body-radial2), var(--t-body-gradient);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--t-bg-body);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(6, 182, 212, 0.3);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(6, 182, 212, 0.5);
+}
+
+/* ============================================
+   THEME-AWARE UTILITY CLASSES
+   ============================================ */
+.t-text { color: var(--t-text-primary); }
+.t-text-secondary { color: var(--t-text-secondary); }
+.t-text-muted { color: var(--t-text-muted); }
+.t-bg-surface { background: var(--t-bg-surface); }
+.t-bg-glass { background: var(--t-bg-glass); }
+.t-bg-elevated { background: var(--t-bg-elevated); }
+.t-bg-input { background: var(--t-bg-input); }
+.t-bg-muted { background: var(--t-bg-muted); }
+.t-bg-inset { background: var(--t-bg-inset); }
+.t-border { border-color: var(--t-border); }
+.t-border-subtle { border-color: var(--t-border-subtle); }
+
+/* ============================================
+   GLASSMORPHISM CARDS
+   ============================================ */
+
+.glass-card {
+  background: var(--t-bg-surface);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--t-border);
+  border-radius: 20px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card:hover {
+  border-color: var(--t-border-glow);
+  box-shadow: 0 0 40px var(--t-card-hover-shadow);
+}
+
+.glass-card-sm {
+  background: var(--t-bg-glass);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--t-border-subtle);
+  border-radius: 16px;
+}
+
+/* ============================================
+   PULSE ANIMATIONS
+   ============================================ */
+
+@keyframes pulse-red {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+  70% { transform: scale(1.1); box-shadow: 0 0 0 20px rgba(239, 68, 68, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+@keyframes pulse-blue {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
+  70% { transform: scale(1.2); box-shadow: 0 0 0 25px rgba(59, 130, 246, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+}
+
+@keyframes pulse-amber {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.5); }
+  70% { transform: scale(1.05); box-shadow: 0 0 0 15px rgba(245, 158, 11, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+
+@keyframes live-blink {
+  0%, 100% { opacity: 1; filter: brightness(1.2); }
+  50% { opacity: 0.5; filter: brightness(0.8); }
+}
+
+@keyframes scanner-line {
+  0% { top: 0; }
+  100% { top: 100%; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes radar-sweep {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.pulse-red { animation: pulse-red 2s infinite; }
+.pulse-amber { animation: pulse-amber 2.5s infinite; }
+.pulse-cyan { animation: pulse-cyan 3s infinite; }
+.live-blink { animation: live-blink 1.5s ease-in-out infinite; }
+.float-anim { animation: float 3s ease-in-out infinite; }
+
+.shimmer-bg {
+  background: linear-gradient(90deg, transparent, rgba(6, 182, 212, 0.05), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 3s infinite;
+}
+
+/* ============================================
+   NEON GLOW EFFECTS
+   ============================================ */
+
+.glow-cyan {
+  box-shadow: 0 0 15px rgba(6, 182, 212, 0.3), 0 0 40px rgba(6, 182, 212, 0.1);
+}
+
+.glow-red {
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.3), 0 0 40px rgba(239, 68, 68, 0.1);
+}
+
+.glow-green {
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.3), 0 0 40px rgba(16, 185, 129, 0.1);
+}
+
+.glow-amber {
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.3), 0 0 40px rgba(245, 158, 11, 0.1);
+}
+
+.text-glow-cyan {
+  text-shadow: 0 0 10px rgba(6, 182, 212, 0.5);
+}
+
+.text-glow-red {
+  text-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+}
+
+/* ============================================
+   MAP OVERRIDES
+   ============================================ */
+
+.leaflet-container {
+  background: transparent !important;
+  border-radius: 24px;
+  font-family: var(--font-sans) !important;
+}
+
+.leaflet-control-zoom {
+  border: none !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
+}
+
+.leaflet-control-zoom a {
+  background: var(--t-bg-surface) !important;
+  color: var(--color-neon-cyan) !important;
+  border: 1px solid var(--t-border) !important;
+  width: 36px !important;
+  height: 36px !important;
+  line-height: 36px !important;
+  font-size: 18px !important;
+}
+
+.leaflet-control-zoom a:hover {
+  background: color-mix(in srgb, var(--color-neon-cyan) 10%, transparent) !important;
+}
+
+.leaflet-popup-content-wrapper {
+  background: var(--t-bg-surface) !important;
+  backdrop-filter: blur(12px) !important;
+  border: 1px solid var(--t-border-glow) !important;
+  border-radius: 12px !important;
+  color: var(--t-text-primary) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08) !important;
+}
+
+.leaflet-popup-tip {
+  background: var(--t-bg-surface) !important;
+  border: 1px solid var(--t-border-glow) !important;
+}
+
+.leaflet-popup-close-button {
+  color: var(--t-text-secondary) !important;
+}
+
+.leaflet-control-attribution {
+  background: var(--t-bg-glass) !important;
+  color: var(--t-text-muted) !important;
+  font-size: 10px !important;
+}
+
+.leaflet-control-attribution a {
+  color: var(--color-neon-cyan) !important;
+}
+
+/* ============================================
+   CUSTOM MAP MARKERS (Premium Glow Spots)
+   ============================================ */
+
+.glow-marker {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+}
+
+.glow-marker::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 20px currentColor;
+  opacity: 0.5;
+  transition: all 0.3s;
+}
+
+.glow-marker:hover {
+  transform: scale(1.4);
+  z-index: 1000;
+}
+
+.glow-marker:hover::after {
+  opacity: 0.8;
+  box-shadow: 0 0 30px currentColor;
+}
+
+.marker-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 0 10px white;
+}
+
+.flood-marker {
+  color: #06b6d4;
+  background: rgba(6, 182, 212, 0.4);
+  border: 1.5px solid #06b6d4;
+}
+
+.flood-marker.danger {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.4);
+  border: 1.5px solid #ef4444;
+  animation: marker-pulse-red 1.5s infinite;
+}
+
+.traffic-marker.heavy {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.4);
+  border: 1.5px solid #ef4444;
+}
+
+.traffic-marker.medium {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.4);
+  border: 1.5px solid #f59e0b;
+}
+
+.traffic-marker.low {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.4);
+  border: 1.5px solid #10b981;
+}
+
+@keyframes marker-pulse-red {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+  70% { transform: scale(1.2); box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+/* ============================================
+   SIDEBAR STYLES
+   ============================================ */
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: 18px;
+  color: var(--t-text-secondary);
+  text-decoration: none;
+  font-size: 15px;
+  font-weight: 600;
+  transition: all 0.25s ease;
+  cursor: pointer;
+}
+
+.sidebar-link:hover {
+  background: rgba(6, 182, 212, 0.10);
+  color: var(--color-neon-cyan);
+}
+
+.sidebar-link.active {
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.18), rgba(59, 130, 246, 0.14));
+  color: var(--color-neon-cyan);
+  border: 1px solid rgba(6, 182, 212, 0.22);
+}
+
+/* ============================================
+   STATUS BADGES
+   ============================================ */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.badge-danger {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.badge-warning {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.badge-success {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.badge-info {
+  background: rgba(6, 182, 212, 0.15);
+  color: #06b6d4;
+  border: 1px solid rgba(6, 182, 212, 0.2);
+}
+
+/* ============================================
+   TOAST NOTIFICATIONS
+   ============================================ */
+
+.toast-container {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  background: var(--t-bg-surface);
+  backdrop-filter: blur(12px);
+  border-radius: 12px;
+  padding: 14px 18px;
+  min-width: 320px;
+  max-width: 400px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  animation: toast-in 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.toast.danger {
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  box-shadow: 0 8px 30px rgba(239, 68, 68, 0.15);
+}
+
+.toast.warning {
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  box-shadow: 0 8px 30px rgba(245, 158, 11, 0.15);
+}
+
+.toast.info {
+  border: 1px solid rgba(6, 182, 212, 0.4);
+  box-shadow: 0 8px 30px rgba(6, 182, 212, 0.15);
+}
+
+@keyframes toast-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* ============================================
+   CHART OVERRIDES
+   ============================================ */
+
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+  stroke: var(--t-border) !important;
+}
+
+.recharts-text {
+  fill: var(--t-text-muted) !important;
+  font-family: var(--font-mono) !important;
+  font-size: 11px !important;
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+
+@media (max-width: 1280px) {
+  .right-panel {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    z-index: 100;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+  }
+  .sidebar.open {
+    transform: translateX(0);
+  }
+}
+
+/* ============================================
+   BACKGROUND GRID
+   ============================================ */
+
+.bg-grid {
+  background-image: 
+    linear-gradient(rgba(6, 182, 212, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(6, 182, 212, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* ============================================
+   LIGHT-MODE SPECIFIC OVERRIDES FOR CHART TOOLTIPS
+   ============================================ */
+[data-theme='light'] .recharts-tooltip-wrapper .recharts-default-tooltip {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-color: var(--t-border) !important;
+  color: var(--t-text-primary) !important;
+}
