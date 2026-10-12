@@ -109,7 +109,7 @@ function AppContent() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Failed to start YOLO service');
+        throw new Error(errorData.detail || 'Failed to start Traffic AI service');
       }
 
       const payload = await response.json();
@@ -122,7 +122,7 @@ function AppContent() {
         message: 'Laptop camera is now streaming detections to backend.',
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to start YOLO service';
+      const message = error instanceof Error ? error.message : 'Unable to start Traffic AI service';
       addToast({
         type: 'danger',
         category: 'system',
@@ -144,7 +144,7 @@ function AppContent() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Failed to stop YOLO service');
+        throw new Error(errorData.detail || 'Failed to stop Traffic AI service');
       }
 
       const payload = await response.json();
@@ -156,10 +156,10 @@ function AppContent() {
         type: 'warning',
         category: 'traffic',
         title: 'Traffic AI Stopped',
-        message: 'YOLO webcam stream has been stopped.',
+        message: 'Traffic AI webcam stream has been stopped.',
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to stop YOLO service';
+      const message = error instanceof Error ? error.message : 'Unable to stop Traffic AI service';
       addToast({
         type: 'danger',
         category: 'system',
@@ -221,6 +221,7 @@ function AppContent() {
             onTrafficAreaChange={setSelectedTrafficArea}
             isOpen={sidebarOpen}
             onClose={() => setSidebarOpen(false)}
+            trafficData={trafficData}
           />
         )}
         

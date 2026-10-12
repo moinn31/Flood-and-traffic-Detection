@@ -178,17 +178,17 @@ class TrafficDetector:
                 # use connect/read timeout tuple to avoid long hangs
                 response = requests.post(BACKEND_URL, json=payload, timeout=(3, 7))
                 if response.status_code == 200:
-                    print(f"  → Sent to backend: {self.selected_area['name']} | {total} vehicles | {level}")
+                    print(f"  -> Sent to backend: {self.selected_area['name']} | {total} vehicles | {level}")
                 else:
-                    print(f"  ✗ Backend error: {response.status_code} {response.text}")
+                    print(f"  x Backend error: {response.status_code} {response.text}")
             except requests.exceptions.ConnectTimeout:
-                print(f"  ✗ Backend connect timeout: {BACKEND_URL}")
+                print(f"  x Backend connect timeout: {BACKEND_URL}")
             except requests.exceptions.ReadTimeout:
-                print(f"  ✗ Backend read timeout: {BACKEND_URL}")
+                print(f"  x Backend read timeout: {BACKEND_URL}")
             except requests.exceptions.ConnectionError:
-                print(f"  ✗ Backend not reachable at {BACKEND_URL}")
+                print(f"  x Backend not reachable at {BACKEND_URL}")
             except Exception as e:
-                print(f"  ✗ Error sending to backend: {e}")
+                print(f"  x Error sending to backend: {e}")
 
         # Send in a background thread to avoid blocking main detection loop
         t = threading.Thread(target=_post, daemon=True)

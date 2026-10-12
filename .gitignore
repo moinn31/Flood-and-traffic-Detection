@@ -1,0 +1,24 @@
+# Byte-compiled / optimized files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+env/
+venv/
+.venv/
+
+# Vite cache & dist
+.vite/
+node_modules/.vite/
+dist/
+
+# Large weights exceeding GitHub 100MB file limit
+*.safetensors
+rtdetr_model/*.safetensors
+
+# SQLite journals
+*.db-journal
+
+# Logs
+*.log

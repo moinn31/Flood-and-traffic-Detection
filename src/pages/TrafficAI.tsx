@@ -302,22 +302,22 @@ export default function TrafficAI({ trafficData, alerts }: TrafficPageProps) {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ camera: 0, area: selectedArea, confidence: yoloConfidence, headless: false }),
                       });
-                      if (!res.ok) throw new Error('Failed to start YOLO');
+                      if (!res.ok) throw new Error('Failed to start Traffic AI');
                       const json = await res.json();
                       setYoloRunning(!!json.running);
                       setYoloPid(json.pid ?? null);
-                      addToast({ type: 'info', category: 'traffic', title: 'YOLO Started', message: `YOLO started for ${selectedArea}` });
+                      addToast({ type: 'info', category: 'traffic', title: 'Traffic AI Started', message: `Live traffic detection active for ${selectedArea}` });
                     } else {
                       const res = await fetch(`${apiBase}/yolo/stop`, { method: 'POST' });
-                      if (!res.ok) throw new Error('Failed to stop YOLO');
+                      if (!res.ok) throw new Error('Failed to stop Traffic AI');
                       const json = await res.json();
                       setYoloRunning(!!json.running);
                       setYoloPid(json.pid ?? null);
-                      addToast({ type: 'warning', category: 'traffic', title: 'YOLO Stopped', message: 'YOLO stopped' });
+                      addToast({ type: 'warning', category: 'traffic', title: 'Traffic AI Stopped', message: 'Traffic AI service stopped' });
                     }
                   } catch (err) {
-                    console.error('YOLO control error', err);
-                    addToast({ type: 'danger', category: 'system', title: 'YOLO Error', message: String(err) });
+                    console.error('Traffic AI control error', err);
+                    addToast({ type: 'danger', category: 'system', title: 'Traffic AI Error', message: String(err) });
                   }
                 }}
                 className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium ${yoloRunning ? 'border-red-500/30 bg-red-500/10 text-red-300' : 'border-green-500/30 bg-green-500/10 text-green-300'}`}
@@ -343,7 +343,7 @@ export default function TrafficAI({ trafficData, alerts }: TrafficPageProps) {
                   </option>
                 ))}
               </select>
-              <p className="mt-2 text-xs" style={{ color: 'var(--t-text-muted)' }}>Used for the live feed, YOLO processing, and the selected-area charts.</p>
+              <p className="mt-2 text-xs" style={{ color: 'var(--t-text-muted)' }}>Used for the live feed, AI detection processing, and the selected-area charts.</p>
             </div>
 
             <div className="rounded-2xl border px-4 py-3" style={{ borderColor: 'var(--t-border)', background: 'var(--t-bg-elevated)' }}>
@@ -488,7 +488,7 @@ export default function TrafficAI({ trafficData, alerts }: TrafficPageProps) {
               <div className="glass-card p-4">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
-                    <h3 className="text-sm font-bold" style={{ color: 'var(--t-text-primary)' }}>Live YOLO Stream</h3>
+                    <h3 className="text-sm font-bold" style={{ color: 'var(--t-text-primary)' }}>Live AI Traffic Stream</h3>
                     <p className="text-xs" style={{ color: 'var(--t-text-muted)' }}>{selectedArea}</p>
                   </div>
                   <div className="flex items-center gap-2 rounded-full border px-3 py-1 text-xs" style={{ borderColor: 'var(--t-border)', background: 'var(--t-bg-elevated)', color: 'var(--t-text-secondary)' }}>
@@ -500,7 +500,7 @@ export default function TrafficAI({ trafficData, alerts }: TrafficPageProps) {
                 <div className="relative h-64 overflow-hidden rounded-2xl bg-black/40">
                   <img
                     src={streamUrl}
-                    alt="YOLO stream"
+                    alt="AI Traffic stream"
                     className="h-full w-full object-cover"
                     onLoad={() => setStreamStatus('connected')}
                     onError={() => setStreamStatus('disconnected')}

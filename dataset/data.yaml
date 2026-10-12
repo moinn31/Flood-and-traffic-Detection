@@ -1,0 +1,15 @@
+path: ./dataset
+train: train/images
+val: valid/images
+test: test/images
+
+names:
+  0: Bike
+  1: Bus
+  2: Car
+  3: Cart
+  4: Person
+  5: Rickshaw
+  6: Suzuki
+  7: Truck
+  8: Van

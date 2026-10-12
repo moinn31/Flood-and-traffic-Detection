@@ -17,15 +17,28 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Optional
 
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from supabase import create_client, Client
 
+from database import db_manager
+
+# Ensure local SQLite database and tables are pre-seeded and ready
+db_manager.init_db()
+
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://asczdgonhfaasskhwifc.supabase.co")
-# Use an environment variable for the service key in production. The anonymous/anon key is used as a fallback for local testing.
 SUPABASE_KEY = os.getenv("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzY3pkZ29uaGZhYXNza2h3aWZjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3NzIwNDgsImV4cCI6MjA5NDM0ODA0OH0.JIFnECFks2QuxbDX-iIYt6R8m7mA7QROZSZTRXfOVlA")
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+supabase_client: Optional[Client] = None
+try:
+    supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+except Exception as e:
+    print(f"[Supabase] Optional client warning: {e}")
 
 # ============================================
 # DATA MODELS
@@ -169,10 +182,16 @@ def _repo_root() -> Path:
 
 
 def _yolo_script_path() -> Path:
+    rtdetr_script = _repo_root() / "rtdetr_service" / "rtdetr_service.py"
+    if rtdetr_script.exists():
+        return rtdetr_script
     return _repo_root() / "yolo_service" / "yolo_service.py"
 
 
 def _yolo_model_path() -> Path:
+    rtdetr_dir = _repo_root() / "rtdetr_model"
+    if rtdetr_dir.exists():
+        return rtdetr_dir
     return _repo_root() / "yolo_service" / "yolov8n.pt"
 
 
@@ -271,40 +290,7 @@ async def root():
 @app.get("/api/flood-data", response_model=List[FloodDataOut])
 async def get_flood_data():
     try:
-        response = supabase.table("flood_data").select("*").execute()
-        rows = response.data or []
-
-        # Normalize records to match FloodDataOut expected fields
-        def area_coords(name: str):
-            for a in VADODARA_AREAS:
-                if a["name"].lower() == (name or "").lower():
-                    return a.get("lat"), a.get("lng")
-            return None, None
-
-        normalized = []
-        for r in rows:
-            lat, lng = area_coords(r.get("area_name") or r.get("area") or r.get("sensor_name"))
-            water_level = r.get("water_level") or r.get("level") or 0
-            severity = r.get("severity") or r.get("status") or (
-                "danger" if water_level >= 180 else ("warning" if water_level >= 100 else "safe")
-            )
-            last_updated = r.get("last_updated") or r.get("updated_at") or r.get("created_at")
-
-            normalized.append({
-                "id": r.get("id") or r.get("sensor_id"),
-                "sensor_name": r.get("sensor_name") or r.get("sensor") or r.get("sensor_id"),
-                "area_name": r.get("area_name") or r.get("area") or r.get("sensor_name"),
-                "latitude": lat or 0.0,
-                "longitude": lng or 0.0,
-                "water_level": float(water_level),
-                "max_threshold": r.get("max_threshold", 180),
-                "warn_threshold": r.get("warn_threshold", 100),
-                "status": r.get("status") or r.get("flood_status") or "online",
-                "severity": severity,
-                "last_updated": last_updated,
-            })
-
-        return normalized
+        return db_manager.get_all_flood_data()
     except Exception as e:
         print(f"Error fetching flood data: {e}")
         return []
@@ -327,18 +313,21 @@ async def post_flood_data(data: FloodDataIn):
         "last_updated": datetime.utcnow().isoformat(),
     }
 
-    # Update or insert to Supabase
+    # Save to local persistent SQLite database
     try:
-        existing = supabase.table("flood_data").select("id").eq("area_name", data.area_name).execute()
-        if existing.data and len(existing.data) > 0:
-            record["id"] = existing.data[0]["id"]
-            
-        result = supabase.table("flood_data").upsert(record).execute()
-        if result.data:
-            record["id"] = result.data[0]["id"]
+        saved = db_manager.upsert_flood_data(record)
+        record["id"] = saved.get("id") or data.sensor_id
         print(f"[DB] Flood data saved: {data.area_name} water_level={data.water_level}")
     except Exception as e:
-        print(f"Supabase error (flood upsert): {e}")
+        print(f"DB error (flood upsert): {e}")
+        record["id"] = data.sensor_id
+
+    # Optional sync to Supabase
+    try:
+        if supabase_client:
+            supabase_client.table("flood_data").upsert(record).execute()
+    except Exception:
+        pass
 
     # Auto-generate alert if danger
     if severity == "danger":
@@ -350,15 +339,16 @@ async def post_flood_data(data: FloodDataIn):
             "created_at": datetime.utcnow().isoformat(),
         }
         try:
-            result = supabase.table("alerts").insert(alert).execute()
-            if result.data:
-                alert["id"] = result.data[0]["id"]
-        except Exception as e:
-            print(f"Supabase alert error: {e}")
+            saved_alert = db_manager.insert_alert(alert)
+            alert["id"] = saved_alert.get("id")
+        except Exception:
+            pass
+        try:
+            if supabase_client:
+                supabase_client.table("alerts").insert(alert).execute()
+        except Exception:
+            pass
         await manager.broadcast({"type": "alert", "data": alert})
-
-    if "id" not in record:
-        record["id"] = data.sensor_id  # Fallback for websocket
 
     await manager.broadcast({"type": "flood_update", "data": record})
     return {"status": "ok", "id": record["id"]}
@@ -366,42 +356,14 @@ async def post_flood_data(data: FloodDataIn):
 @app.get("/api/traffic-data", response_model=List[TrafficDataOut])
 async def get_traffic_data():
     try:
-        response = supabase.table("traffic_data").select("*").execute()
-        rows = response.data or []
-
-        # Normalize traffic rows to include last_updated
-        normalized = []
-        for r in rows:
-            last_updated = r.get("last_updated") or r.get("updated_at") or r.get("created_at")
-            vehicle_count = r.get("vehicle_count") or (
-                (r.get("cars", 0) or 0) + (r.get("bikes", 0) or 0) + (r.get("trucks", 0) or 0) + (r.get("buses", 0) or 0)
-            )
-            normalized.append({
-                "id": r.get("id"),
-                "area_name": r.get("area_name"),
-                "latitude": r.get("latitude") or 0.0,
-                "longitude": r.get("longitude") or 0.0,
-                "cars": int(r.get("cars") or 0),
-                "bikes": int(r.get("bikes") or r.get("motorcycle") or 0),
-                "trucks": int(r.get("trucks") or 0),
-                "buses": int(r.get("buses") or 0),
-                "vehicle_count": int(vehicle_count),
-                "traffic_level": r.get("traffic_level") or r.get("level") or "low",
-                "traffic_percentage": int(r.get("traffic_percentage") or 0),
-                "last_updated": last_updated,
-            })
-
-        return normalized
+        return db_manager.get_all_traffic_data()
     except Exception as e:
         print(f"Error fetching traffic data: {e}")
         return []
 
 @app.post("/api/traffic-data")
 async def post_traffic_data(data: TrafficDataIn):
-    total = data.cars + data.bikes + data.trucks + data.buses
-    if total <= 0:
-        return {"status": "skipped", "reason": "no vehicles detected", "area": data.area_name}
-
+    total = max(0, data.cars + data.bikes + data.trucks + data.buses)
     pct = min(100, int((total / 350) * 100))
     level = "heavy" if pct >= 75 else ("medium" if pct >= 40 else "low")
 
@@ -409,41 +371,45 @@ async def post_traffic_data(data: TrafficDataIn):
         "area_name": data.area_name,
         "latitude": data.latitude,
         "longitude": data.longitude,
-        "cars": data.cars,
-        "bikes": data.bikes,
-        "trucks": data.trucks,
-        "buses": data.buses,
+        "cars": max(0, data.cars),
+        "bikes": max(0, data.bikes),
+        "trucks": max(0, data.trucks),
+        "buses": max(0, data.buses),
         "vehicle_count": total,
         "traffic_level": level,
         "traffic_percentage": pct,
         "last_updated": datetime.utcnow().isoformat(),
     }
 
-    # Update or insert to Supabase
+    # Save to local persistent SQLite database
     try:
-        # Check if exists by area_name
-        existing = supabase.table("traffic_data").select("id").eq("area_name", data.area_name).execute()
-        if existing.data and len(existing.data) > 0:
-            record["id"] = existing.data[0]["id"]
-            
-        result = supabase.table("traffic_data").upsert(record).execute()
-        if result.data:
-            record["id"] = result.data[0]["id"]
-        print(f"[DB] Traffic data saved: {data.area_name} total={total} level={level}")
+        saved = db_manager.upsert_traffic_data(record)
+        record["id"] = saved.get("id") or f"TR-{uuid.uuid4().hex[:6].upper()}"
+        print(f"[DB] Traffic data saved to database: {data.area_name} total={total} level={level}")
     except Exception as e:
-        print(f"Supabase error (traffic upsert): {e}")
+        print(f"DB error (traffic upsert): {e}")
+        record["id"] = f"TR-{uuid.uuid4().hex[:6].upper()}"
 
     # Also save to traffic_history for analytics
+    history_record = {
+        "area_name": data.area_name,
+        "vehicle_count": total,
+        "traffic_level": level,
+        "traffic_percentage": pct,
+        "recorded_at": record["last_updated"],
+    }
     try:
-        history_record = {
-            "area_name": data.area_name,
-            "vehicle_count": total,
-            "traffic_level": level,
-            "traffic_percentage": pct,
-        }
-        supabase.table("traffic_history").insert(history_record).execute()
+        db_manager.insert_traffic_history(history_record)
     except Exception as e:
-        print(f"Supabase error (traffic_history insert): {e}")
+        print(f"DB error (traffic_history insert): {e}")
+
+    # Optional sync to Supabase
+    try:
+        if supabase_client:
+            supabase_client.table("traffic_data").upsert(record).execute()
+            supabase_client.table("traffic_history").insert(history_record).execute()
+    except Exception:
+        pass
 
     # Auto-generate alert if heavy
     if level == "heavy":
@@ -455,34 +421,29 @@ async def post_traffic_data(data: TrafficDataIn):
             "created_at": datetime.utcnow().isoformat(),
         }
         try:
-            result = supabase.table("alerts").insert(alert).execute()
-            if result.data:
-                alert["id"] = result.data[0]["id"]
-        except Exception as e:
-            print(f"Supabase alert error: {e}")
+            saved_alert = db_manager.insert_alert(alert)
+            alert["id"] = saved_alert.get("id")
+        except Exception:
+            pass
+        try:
+            if supabase_client:
+                supabase_client.table("alerts").insert(alert).execute()
+        except Exception:
+            pass
         await manager.broadcast({"type": "alert", "data": alert})
 
-    if "id" not in record:
-        record["id"] = f"TR-{uuid.uuid4().hex[:6].upper()}"  # Fallback for websocket
-
     await manager.broadcast({"type": "traffic_update", "data": record})
-    return {"status": "ok", "area": data.area_name}
+    return {"status": "ok", "area": data.area_name, "id": record["id"], "vehicle_count": total}
 
 
 @app.get("/api/traffic-history", response_model=List[TrafficHistoryOut])
 async def get_traffic_history(area_name: Optional[str] = None, hours: int = 24, limit: int = 200):
     try:
-        query = supabase.table("traffic_history").select("*").order("recorded_at", desc=True).limit(limit)
-        if area_name:
-            query = query.eq("area_name", area_name)
-
-        response = query.execute()
-        rows = response.data or []
-
+        rows = db_manager.get_traffic_history(area_name=area_name, limit=limit)
         cutoff = datetime.utcnow().timestamp() - (hours * 3600)
         filtered = []
         for row in rows:
-            recorded_at = row.get("recorded_at") or row.get("created_at")
+            recorded_at = row.get("recorded_at")
             if not recorded_at:
                 continue
 
@@ -493,14 +454,7 @@ async def get_traffic_history(area_name: Optional[str] = None, hours: int = 24, 
             except Exception:
                 pass
 
-            filtered.append({
-                "id": row.get("id"),
-                "area_name": row.get("area_name"),
-                "vehicle_count": int(row.get("vehicle_count") or 0),
-                "traffic_level": row.get("traffic_level") or "low",
-                "traffic_percentage": int(row.get("traffic_percentage") or 0),
-                "recorded_at": str(recorded_at),
-            })
+            filtered.append(row)
 
         # Return chronological order for charting
         return list(reversed(filtered))
@@ -511,29 +465,36 @@ async def get_traffic_history(area_name: Optional[str] = None, hours: int = 24, 
 @app.get("/api/alerts", response_model=List[AlertOut])
 async def get_alerts():
     try:
-        response = supabase.table("alerts").select("*").order("created_at", desc=True).limit(20).execute()
-        return response.data
-    except Exception:
+        return db_manager.get_all_alerts(limit=20)
+    except Exception as e:
+        print(f"Error fetching alerts: {e}")
         return []
 
 @app.post("/api/sensor-status")
 async def update_sensor_status(data: SensorStatusIn):
     try:
-        record = supabase.table("flood_data").select("*").eq("id", data.sensor_id).execute()
-        if not record.data:
+        all_sensors = db_manager.get_all_flood_data()
+        target = next((s for s in all_sensors if s["id"] == data.sensor_id or s.get("sensor_name") == data.sensor_id or s.get("area_name") == data.sensor_id), None)
+        if not target:
             raise HTTPException(status_code=404, detail="Sensor not found")
-            
-        updated = record.data[0]
-        updated["status"] = data.status
-        updated["last_updated"] = datetime.utcnow().isoformat()
-        supabase.table("flood_data").upsert(updated).execute()
-        
-        await manager.broadcast({"type": "sensor_status", "data": updated})
+
+        target["status"] = data.status
+        target["last_updated"] = datetime.utcnow().isoformat()
+        db_manager.upsert_flood_data(target)
+
+        try:
+            if supabase_client:
+                supabase_client.table("flood_data").upsert(target).execute()
+        except Exception:
+            pass
+
+        await manager.broadcast({"type": "sensor_status", "data": target})
         return {"status": "ok", "sensor_id": data.sensor_id}
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @app.get("/api/yolo/status", response_model=YoloStatusOut)
@@ -630,16 +591,16 @@ async def stop_yolo():
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
-        # Fetch initial data from Supabase
+        # Fetch initial data from local SQLite database
         flood_data = []
         traffic_data = []
         alerts_data = []
         try:
-            flood_data = supabase.table("flood_data").select("*").execute().data
-            traffic_data = supabase.table("traffic_data").select("*").execute().data
-            alerts_data = supabase.table("alerts").select("*").order("created_at", desc=True).limit(10).execute().data
-        except Exception:
-            pass
+            flood_data = db_manager.get_all_flood_data()
+            traffic_data = db_manager.get_all_traffic_data()
+            alerts_data = db_manager.get_all_alerts(10)
+        except Exception as e:
+            print(f"Error fetching initial websocket data: {e}")
 
         await websocket.send_json({
             "type": "init",

@@ -19,7 +19,7 @@ import {
   Waves
 } from 'lucide-react';
 import { VADODARA_AREAS } from '../data';
-import { SystemStatus, YoloRuntimeStatus } from '../types';
+import { SystemStatus, YoloRuntimeStatus, TrafficData } from '../types';
 
 interface SidebarProps {
   systemStatus: SystemStatus;
@@ -32,13 +32,14 @@ interface SidebarProps {
   onStopYolo: () => Promise<void>;
   isOpen?: boolean;
   onClose?: () => void;
+  trafficData?: TrafficData[];
 }
 
 const navItems = [
   { path: '/', icon: Globe, label: 'Command Center', hint: 'Unified city map and controls' },
   { path: '/flood', icon: Droplets, label: 'Flood Monitor', hint: 'Water sensors and risk levels' },
   { path: '/traffic', icon: Car, label: 'Traffic AI', hint: 'Vehicle analytics and congestion' },
-  { path: '/yolo', icon: Play, label: 'YOLO Service', hint: 'Start/stop traffic AI service' },
+  { path: '/yolo', icon: Play, label: 'Traffic AI Service', hint: 'Start/stop live traffic detection' },
   { path: '/alerts', icon: AlertTriangle, label: 'Alert Feed', hint: 'Critical incidents timeline' },
 ];
 
@@ -52,6 +53,7 @@ export default function Sidebar({
   onStopYolo,
   isOpen,
   onClose,
+  trafficData,
 }: SidebarProps) {
   const [showGui, setShowGui] = useState(false);
   return (
@@ -172,7 +174,7 @@ export default function Sidebar({
                       </option>
                     ))}
                   </select>
-                  <div className="text-[10px] text-emerald-400 mt-0.5">{yoloStatus.running ? '28.4 FPS' : '--'}</div>
+                  <div className="text-[10px] text-emerald-400 mt-0.5">{yoloStatus.running ? 'Live Active' : 'Offline'}</div>
                 </div>
                 <div className="mt-2 px-2">
                   <label className="inline-flex items-center gap-2 text-[11px]" style={{ color: 'var(--t-text-secondary)' }}>
@@ -182,7 +184,11 @@ export default function Sidebar({
                 </div>
                 <div className="rounded-xl border p-2 transition-colors" style={{ borderColor: 'var(--t-border)', background: 'var(--t-bg-elevated)' }}>
                   <div className="text-[9px] uppercase" style={{ color: 'var(--t-text-muted)' }}>Detections</div>
-                  <div className="text-xs text-cyan-400 font-bold mt-0.5">{yoloStatus.running ? '142 Vehicles' : '--'}</div>
+                  <div className="text-xs text-cyan-400 font-bold mt-0.5">
+                    {yoloStatus.running 
+                      ? `${trafficData?.find(t => t.area_name.toLowerCase() === selectedTrafficArea.toLowerCase())?.vehicle_count ?? 0} Vehicles` 
+                      : '--'}
+                  </div>
                 </div>
               </div>
             </div>

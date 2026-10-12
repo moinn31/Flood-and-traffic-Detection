@@ -22,8 +22,8 @@ export default function YoloService({ yoloStatus, onStart, onStop }: Props) {
   return (
     <div className="p-6 h-full overflow-auto">
       <div className="max-w-3xl mx-auto">
-        <h1 className="text-2xl font-bold mb-3" style={{ color: 'var(--t-text-primary)' }}>YOLOv8 Traffic AI Service</h1>
-        <p className="text-sm mb-6" style={{ color: 'var(--t-text-muted)' }}>Control the YOLO service running on the host machine. Start/stop the webcam-based detector and view runtime status.</p>
+        <h1 className="text-2xl font-bold mb-3" style={{ color: 'var(--t-text-primary)' }}>Traffic Detection Service</h1>
+        <p className="text-sm mb-6" style={{ color: 'var(--t-text-muted)' }}>Control the automated traffic detection service running on the host machine. Start/stop the webcam-based detector and view runtime status.</p>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <div className="p-4 rounded-lg border" style={{ background: 'var(--t-bg-elevated)', borderColor: 'var(--t-border)' }}>
