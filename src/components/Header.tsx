@@ -1,24 +1,43 @@
 /* ============================================
-   HEADER COMPONENT
-   Top bar with time, system health, connection
+   HEADER COMPONENT — Enterprise Command Edition
    ============================================ */
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Wifi, Shield, Activity, Bell, Menu, CloudRain, User, Zap } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { 
+  Wifi, Shield, Activity, Bell, Menu, CloudRain, 
+  Zap, Sun, Moon, PanelRightClose, PanelRight, Sparkles 
+} from 'lucide-react';
 import { SystemStatus } from '../types';
 
 interface HeaderProps {
   systemStatus: SystemStatus;
   alertCount: number;
+  theme: 'light' | 'dark';
+  onToggleTheme: () => void;
   onToggleSidebar?: () => void;
   isEmergency?: boolean;
   onToggleEmergency?: () => void;
   onToggleWeather?: () => void;
+  rightPanelOpen?: boolean;
+  onToggleRightPanel?: () => void;
 }
 
-export default function Header({ systemStatus, alertCount, onToggleSidebar, isEmergency, onToggleEmergency, onToggleWeather }: HeaderProps) {
+export default function Header({ 
+  systemStatus, 
+  alertCount, 
+  theme,
+  onToggleTheme,
+  onToggleSidebar, 
+  isEmergency, 
+  onToggleEmergency, 
+  onToggleWeather,
+  rightPanelOpen = true,
+  onToggleRightPanel,
+}: HeaderProps) {
   const [time, setTime] = useState(new Date());
+  const navigate = useNavigate();
 
   useEffect(() => {
     const interval = setInterval(() => setTime(new Date()), 1000);
@@ -28,122 +47,152 @@ export default function Header({ systemStatus, alertCount, onToggleSidebar, isEm
   const formatTime = (d: Date) =>
     d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
   const formatDate = (d: Date) =>
-    d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+    d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
 
   return (
     <header
-      className="h-16 border-b backdrop-blur-2xl flex items-center justify-between px-6 z-50 relative shadow-lg"
+      className="h-16 border-b backdrop-blur-2xl flex items-center justify-between px-4 lg:px-6 z-50 relative shrink-0 shadow-sm transition-colors duration-300"
       style={{ background: 'var(--t-header-bg)', borderColor: 'var(--t-border)' }}
     >
-      {/* Left: Logo & Live */}
-      <div className="flex items-center gap-4">
+      {/* Left: Brand & Mobile Nav */}
+      <div className="flex items-center gap-3">
         <button
           onClick={onToggleSidebar}
-          className="lg:hidden p-2 rounded-lg hover:bg-black/10 transition"
-          style={{ color: 'var(--t-text-muted)' }}
+          className="lg:hidden p-2 rounded-xl border hover:bg-black/5 transition"
+          style={{ borderColor: 'var(--t-border)', color: 'var(--t-text-muted)' }}
+          title="Toggle Menu"
         >
-          <Menu size={20} />
+          <Menu size={18} />
         </button>
         
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/25">
-            <Shield size={20} className="text-white" />
+        <div 
+          onClick={() => navigate('/')} 
+          className="flex items-center gap-2.5 cursor-pointer group"
+        >
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-500 via-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-cyan-500/20 group-hover:scale-105 transition-transform">
+            <Shield size={19} />
           </div>
-          <div className="hidden sm:block">
-            <h1 className="text-sm font-bold" style={{ color: 'var(--t-text-primary)' }}>
-              VADODARA <span className="text-cyan-400">SMART CITY</span>
-            </h1>
-            <p className="text-[9px] font-medium" style={{ color: 'var(--t-text-muted)' }}>Real-time Monitoring</p>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-sm font-extrabold tracking-tight uppercase" style={{ color: 'var(--t-text-primary)' }}>
+                Vadodara <span className="text-cyan-500">Smart City</span>
+              </h1>
+              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Live
+              </span>
+            </div>
+            <p className="text-[10px] font-medium hidden sm:block" style={{ color: 'var(--t-text-muted)' }}>
+              Integrated IoT Flood & Traffic Command Console
+            </p>
           </div>
         </div>
-
-        {/* Live Indicator */}
-        <motion.div
-          className="flex items-center gap-2 ml-4 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 shadow-[0_0_30px_rgba(16,185,129,0.12)]"
-          animate={{ opacity: [1, 0.7, 1] }}
-          transition={{ duration: 2, repeat: Infinity }}
-        >
-          <div className="w-2 h-2 rounded-full bg-emerald-400" />
-          <span className="text-[10px] font-semibold text-emerald-400">LIVE</span>
-        </motion.div>
       </div>
 
-      {/* Center: Time */}
-      <div className="hidden md:flex flex-col items-center gap-0.5">
-        <span className="text-base font-mono font-bold" style={{ color: 'var(--t-text-primary)' }}>
-          {formatTime(time)}
-        </span>
-        <span className="text-[9px]" style={{ color: 'var(--t-text-muted)' }}>{formatDate(time)}</span>
+      {/* Center: Live Clock & Sync Health */}
+      <div className="hidden md:flex items-center gap-4">
+        <div className="flex flex-col items-center">
+          <span className="text-sm font-mono font-bold tracking-tight" style={{ color: 'var(--t-text-primary)' }}>
+            {formatTime(time)}
+          </span>
+          <span className="text-[9px] uppercase font-semibold" style={{ color: 'var(--t-text-muted)' }}>
+            {formatDate(time)} • IST
+          </span>
+        </div>
+
+        <div className="h-5 w-px" style={{ background: 'var(--t-border)' }} />
+
+        <div className="flex items-center gap-2 text-xs font-semibold" style={{ color: 'var(--t-text-secondary)' }}>
+          <Activity size={13} className="text-cyan-400 animate-pulse" />
+          <span className="text-[11px]">{systemStatus.sensors_online}/{systemStatus.sensors_total} Nodes Synced</span>
+        </div>
       </div>
 
-      {/* Right: Status & Alerts */}
-      <div className="flex items-center gap-2 lg:gap-3">
-        {/* Weather */}
+      {/* Right: Actions, Theme Toggle, Emergency & Alerts */}
+      <div className="flex items-center gap-2 sm:gap-2.5">
+        {/* Weather Badge */}
         <div 
           onClick={onToggleWeather}
-          className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border transition cursor-pointer"
-          style={{ background: 'var(--t-bg-glass)', borderColor: 'var(--t-border)' }}
+          className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[11px] font-medium transition cursor-pointer hover:border-cyan-400/40"
+          style={{ background: 'var(--t-bg-glass)', borderColor: 'var(--t-border)', color: 'var(--t-text-secondary)' }}
+          title="Weather Forecast"
         >
-          <CloudRain size={14} className="text-blue-400" />
-          <span className="text-[10px] font-medium" style={{ color: 'var(--t-text-secondary)' }}>29°C Rainy</span>
+          <CloudRain size={13} className="text-blue-400" />
+          <span>29°C Monsoon</span>
         </div>
 
-        {/* Last Sync */}
-        <div
-          className="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-full border"
-          style={{ background: 'var(--t-bg-glass)', borderColor: 'var(--t-border)' }}
+        {/* PROPER DARK & LIGHT THEME TOGGLE */}
+        <button
+          onClick={onToggleTheme}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shadow-sm active:scale-95 cursor-pointer"
+          style={{ 
+            background: 'var(--t-bg-elevated)', 
+            borderColor: 'var(--t-border)', 
+            color: 'var(--t-text-primary)' 
+          }}
+          title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
         >
-          <Activity size={14} className="text-emerald-400" />
-          <span className="text-[10px] font-medium" style={{ color: 'var(--t-text-secondary)' }}>Sync: Just now</span>
-        </div>
+          {theme === 'dark' ? (
+            <>
+              <Sun size={14} className="text-amber-400 animate-spin-slow" />
+              <span className="text-[11px] uppercase tracking-wider font-extrabold hidden sm:inline">Light Mode</span>
+            </>
+          ) : (
+            <>
+              <Moon size={14} className="text-indigo-600" />
+              <span className="text-[11px] uppercase tracking-wider font-extrabold hidden sm:inline">Dark Mode</span>
+            </>
+          )}
+        </button>
 
         {/* Emergency Mode Toggle */}
         <button 
           onClick={onToggleEmergency}
-          className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full transition shadow-lg group
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all shadow-sm active:scale-95 text-xs font-bold cursor-pointer
             ${isEmergency 
-              ? 'bg-rose-500/20 border border-rose-500/50 shadow-rose-950/40 animate-pulse' 
-              : 'bg-rose-500/10 border border-rose-500/30 hover:bg-rose-500/20 shadow-rose-950/20'
+              ? 'bg-rose-500/25 border-rose-500 text-rose-400 animate-pulse shadow-rose-950/40' 
+              : 'bg-rose-500/10 border-rose-500/30 text-rose-400 hover:bg-rose-500/20'
             }`}
+          title="Toggle City Emergency Siren State"
         >
-          <Zap size={14} className={`text-rose-400 ${!isEmergency && 'group-hover:animate-pulse'}`} />
-          <span className="text-[10px] font-bold text-rose-300 uppercase tracking-wider">
-            {isEmergency ? 'Critical' : 'Emergency'}
+          <Zap size={13} className={isEmergency ? 'animate-bounce' : ''} />
+          <span className="text-[11px] uppercase tracking-wider font-extrabold hidden sm:inline">
+            {isEmergency ? 'Emergency Active' : 'Siren'}
           </span>
         </button>
 
-        {/* Connection Status */}
-        <div
-          className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-full border transition"
-          style={{ background: 'var(--t-bg-glass)', borderColor: 'var(--t-border)' }}
-        >
-          <Wifi size={14} className="text-cyan-400" />
-          <span className="text-[10px] font-medium" style={{ color: 'var(--t-text-secondary)' }}>Connected</span>
-        </div>
-
-        {/* Alert Bell - Prominent */}
+        {/* Alert Bell */}
         <motion.button
-          whileHover={{ scale: 1.08 }}
+          onClick={() => navigate('/alerts')}
+          whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
-          className="relative p-2 rounded-full border transition ml-1"
-          style={{ background: 'var(--t-bg-glass)', borderColor: 'var(--t-border)' }}
+          className="relative p-2 rounded-xl border transition cursor-pointer"
+          style={{ background: 'var(--t-bg-elevated)', borderColor: 'var(--t-border)' }}
+          title="Incident Alerts Center"
         >
-          <Bell size={18} className={alertCount > 0 ? "text-red-400" : ""} style={alertCount > 0 ? {} : { color: 'var(--t-text-muted)' }} />
+          <Bell size={16} className={alertCount > 0 ? "text-rose-500" : ""} style={alertCount > 0 ? {} : { color: 'var(--t-text-muted)' }} />
           {alertCount > 0 && (
-            <motion.span
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[8px] font-bold flex items-center justify-center animate-pulse"
-            >
+            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[8px] font-extrabold flex items-center justify-center animate-pulse shadow-md">
               {alertCount}
-            </motion.span>
+            </span>
           )}
         </motion.button>
 
-        {/* User Profile */}
-        <div className="ml-1 md:ml-2 w-8 h-8 rounded-full bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center border-2 border-white/10 shadow-lg shadow-cyan-500/20 cursor-pointer hover:border-cyan-400/50 transition">
-          <User size={16} className="text-white" />
-        </div>
+        {/* Right Panel Toggle Button */}
+        {onToggleRightPanel && (
+          <button
+            onClick={onToggleRightPanel}
+            className="p-2 rounded-xl border transition cursor-pointer hidden md:flex items-center justify-center"
+            style={{ 
+              background: rightPanelOpen ? 'var(--t-bg-elevated)' : 'transparent', 
+              borderColor: 'var(--t-border)',
+              color: rightPanelOpen ? 'var(--t-text-primary)' : 'var(--t-text-muted)'
+            }}
+            title={rightPanelOpen ? 'Hide Right Telemetry Panel' : 'Show Right Telemetry Panel'}
+          >
+            {rightPanelOpen ? <PanelRightClose size={16} /> : <PanelRight size={16} />}
+          </button>
+        )}
       </div>
     </header>
   );

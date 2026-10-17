@@ -1,5 +1,6 @@
 /* ============================================
-   RIGHT PANEL — Selection Details & Live Alerts
+   RIGHT PANEL — Telemetry Inspector & Incident Stream
+   Enterprise collapsible drawer
    ============================================ */
 
 import { motion, AnimatePresence } from 'framer-motion';
@@ -7,15 +8,17 @@ import { useState, useEffect } from 'react';
 import {
   AlertTriangle,
   X,
-  Cpu,
-  Play,
-  Square,
+  Radio,
   Clock3,
-  Camera,
   MapPinned,
+  Droplets,
+  Car,
+  TrendingUp,
+  Activity,
+  Layers,
+  ChevronRight
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { VADODARA_AREAS } from '../data';
 import { Alert, FloodSensor, TrafficData, YoloRuntimeStatus } from '../types';
 
 interface RightPanelProps {
@@ -30,25 +33,16 @@ interface RightPanelProps {
   onTrafficAreaChange: (area: string) => void;
   onStartYolo: (area: string, headless?: boolean) => Promise<void>;
   onStopYolo: () => Promise<void>;
+  onClosePanel?: () => void;
 }
 
 const timeAgo = (iso: string) => {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Now';
-  if (mins < 60) return `${mins}m`;
-  return `${Math.floor(mins / 60)}h`;
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  return `${Math.floor(mins / 60)}h ago`;
 };
-
-const formatRuntime = (startedAt: string | null) => {
-  if (!startedAt) return 'Not running';
-  const elapsedMs = Date.now() - new Date(startedAt).getTime();
-  if (elapsedMs < 60000) return `${Math.floor(elapsedMs / 1000)}s live`;
-  if (elapsedMs < 3600000) return `${Math.floor(elapsedMs / 60000)}m live`;
-  return `${Math.floor(elapsedMs / 3600000)}h live`;
-};
-
-
 
 export default function RightPanel({
   alerts,
@@ -56,14 +50,9 @@ export default function RightPanel({
   trafficData,
   selectedPlot,
   onClearSelection,
-  yoloStatus,
-  isYoloBusy,
-  selectedTrafficArea,
-  onTrafficAreaChange,
-  onStartYolo,
-  onStopYolo,
+  onClosePanel,
 }: RightPanelProps) {
-  const dangerSensors = floodSensors.filter(s => s.severity === 'danger').length;
+  const dangerSensors = floodSensors.filter(s => s.severity === 'danger' || s.water_level >= 180).length;
   const heavyTraffic = trafficData.filter(t => t.traffic_level === 'heavy').length;
   const unreadAlerts = alerts.filter(a => !a.read);
 
@@ -77,146 +66,157 @@ export default function RightPanel({
     
     setGraphData(prev => {
       const newGraph = [...prev, { time: timeStr, traffic: Math.round(avgTraffic), flood: Math.round(avgFlood) }];
-      if (newGraph.length > 20) newGraph.shift(); // keep last 20 points
+      if (newGraph.length > 15) newGraph.shift();
       return newGraph;
     });
   }, [trafficData, floodSensors]);
 
   return (
     <div
-      className="right-panel w-[360px] h-full border-l backdrop-blur-md flex flex-col z-[100] shadow-inner"
+      className="w-[310px] lg:w-[330px] h-full flex flex-col z-[100] transition-colors"
       style={{ background: 'var(--t-right-panel-bg)', borderColor: 'var(--t-border)' }}
     >
+      {/* Panel Header */}
+      <div 
+        className="px-4 py-3.5 border-b flex items-center justify-between shrink-0"
+        style={{ borderColor: 'var(--t-border)', background: 'var(--t-bg-elevated)' }}
+      >
+        <div className="flex items-center gap-2">
+          <Activity size={15} className="text-cyan-500" />
+          <h2 className="text-xs font-black uppercase tracking-wider" style={{ color: 'var(--t-text-primary)' }}>
+            Telemetry Inspector
+          </h2>
+        </div>
+
+        {onClosePanel && (
+          <button
+            onClick={onClosePanel}
+            className="p-1 rounded-lg hover:bg-black/5 transition text-slate-400 hover:text-slate-600 dark:hover:text-white"
+            title="Close Panel"
+          >
+            <X size={15} />
+          </button>
+        )}
+      </div>
+
       <AnimatePresence mode="wait">
         {selectedPlot ? (
+          /* SECTOR DEEP-DIVE INSPECTOR */
           <motion.div
             key="details"
-            initial={{ x: 350 }}
-            animate={{ x: 0 }}
-            exit={{ x: 350 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="flex-1 flex flex-col overflow-hidden"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            className="flex-1 flex flex-col overflow-y-auto p-4 space-y-4"
           >
-            {/* Detail Header - Simplified */}
-            <div className="p-5" style={{ borderBottom: '1px solid var(--t-border)' }}>
-              <div className="flex items-center justify-between mb-4">
-                <div className={`px-3 py-1.5 rounded-full text-[10px] font-semibold uppercase flex items-center gap-2 tracking-wider ${
-                  selectedPlot.type === 'flood' ? 'bg-cyan-500/15 text-cyan-500' : 'bg-amber-500/15 text-amber-500'
-                }`}>
-                  <div className={`w-1.5 h-1.5 rounded-full ${
-                    selectedPlot.type === 'flood' ? 'bg-cyan-400' : 'bg-amber-400'
-                  }`} />
-                  {selectedPlot.type.toUpperCase()}
-                </div>
-                <button 
-                  onClick={onClearSelection}
-                  className="p-1.5 rounded-lg transition"
-                  style={{ color: 'var(--t-text-muted)' }}
-                >
-                  <X size={16} />
-                </button>
-              </div>
+            <div className="flex items-center justify-between">
+              <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider flex items-center gap-1.5 ${
+                selectedPlot.type === 'flood' ? 'bg-cyan-500/15 text-cyan-500 border border-cyan-500/30' : 'bg-amber-500/15 text-amber-500 border border-amber-500/30'
+              }`}>
+                {selectedPlot.type === 'flood' ? <Droplets size={11} /> : <Car size={11} />}
+                {selectedPlot.type === 'flood' ? 'Hydro Sensor' : 'Traffic Node'}
+              </span>
 
-              <h3 className="text-lg font-extrabold mb-2 tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500">
+              <button
+                onClick={onClearSelection}
+                className="text-[11px] font-semibold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition"
+              >
+                Clear Selection
+              </button>
+            </div>
+
+            <div>
+              <h3 className="text-base font-extrabold" style={{ color: 'var(--t-text-primary)' }}>
                 {selectedPlot.data.area_name}
               </h3>
-              <div className="text-[11px] font-medium flex items-center gap-2" style={{ color: 'var(--t-text-muted)' }}>
-                {selectedPlot.type === 'flood' ? (
-                  <>
-                    <span>Water Level</span>
-                    <span className="font-bold" style={{ color: 'var(--t-text-primary)' }}>{selectedPlot.data.water_level.toFixed(1)}cm</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Traffic</span>
-                    <span className="font-bold" style={{ color: 'var(--t-text-primary)' }}>{selectedPlot.data.traffic_level}</span>
-                  </>
-                )}
-              </div>
+              <p className="text-[11px]" style={{ color: 'var(--t-text-muted)' }}>
+                {selectedPlot.type === 'flood' ? 'Ultrasonic Flood Sensor' : 'Optical Vehicle Flow Counter'}
+              </p>
             </div>
 
-            {/* Stats - Compact */}
-            <div className="px-5 py-4 grid grid-cols-2 gap-3" style={{ borderBottom: '1px solid var(--t-border)' }}>
-              <div className="p-3 rounded-xl border" style={{ background: 'var(--t-bg-elevated)', borderColor: 'var(--t-border)' }}>
-                <div className="text-[9px] font-semibold uppercase mb-2" style={{ color: 'var(--t-text-muted)' }}>Current Status</div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className={`text-sm font-extrabold ${selectedPlot.type === 'flood' ? 'text-cyan-500' : 'text-amber-500'}`}>
-                      {selectedPlot.type === 'flood' ? (
-                        // Inverted mapping for dashboard: high cm => SAFE, low cm => DANGER
-                        selectedPlot.data.water_level >= (selectedPlot.data.max_threshold ?? 180) ? 'SAFE' : selectedPlot.data.water_level >= (selectedPlot.data.warn_threshold ?? 100) ? 'WARNING' : 'DANGER'
-                      ) : (
-                        selectedPlot.data.traffic_level === 'heavy' ? 'HEAVY' : selectedPlot.data.traffic_level === 'medium' ? 'MEDIUM' : 'LOW'
-                      )}
-                    </div>
-                    <div className="text-[11px]" style={{ color: 'var(--t-text-muted)' }}>{selectedPlot.type === 'flood' ? `${selectedPlot.data.water_level.toFixed(1)}cm` : `${selectedPlot.data.vehicle_count} vehicles`}</div>
+            {/* Metrics Breakdown */}
+            {selectedPlot.type === 'flood' ? (
+              <div className="space-y-2.5">
+                <div className="p-3 rounded-2xl border" style={{ background: 'var(--t-bg-elevated)', borderColor: 'var(--t-border)' }}>
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-[11px] font-bold text-slate-400">Current Depth</span>
+                    <span className="text-base font-black text-cyan-500">{Number(selectedPlot.data.water_level).toFixed(1)} cm</span>
                   </div>
-                  <div className="flex flex-col items-end">
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center border" style={{ background: 'var(--t-bg-glass)', borderColor: 'var(--t-border)' }}>
-                      {selectedPlot.type === 'flood' ? <AlertTriangle className="text-cyan-400" size={18} /> : <Camera className="text-amber-400" size={18} />}
-                    </div>
+                  {/* Gauge Progress Bar */}
+                  <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                    <div 
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        selectedPlot.data.water_level >= 180 ? 'bg-rose-500' :
+                        selectedPlot.data.water_level >= 100 ? 'bg-amber-500' : 'bg-cyan-400'
+                      }`}
+                      style={{ width: `${Math.min(100, (selectedPlot.data.water_level / 200) * 100)}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[9px] text-slate-400 mt-1">
+                    <span>0 cm (Safe)</span>
+                    <span>100 cm (Warn)</span>
+                    <span>180 cm (Max)</span>
                   </div>
                 </div>
-              </div>
-              <div className="p-3 rounded-xl border" style={{ background: 'var(--t-bg-elevated)', borderColor: 'var(--t-border)' }}>
-                <div className="text-[9px] font-semibold uppercase mb-2" style={{ color: 'var(--t-text-muted)' }}>Quick Actions</div>
-                <div className="flex flex-col gap-2">
-                  <button className="w-full py-2 rounded-md bg-emerald-500/90 hover:bg-emerald-500 text-white text-xs font-semibold">Acknowledge</button>
-                  <button className="w-full py-2 rounded-md bg-cyan-600/70 hover:bg-cyan-600 text-white text-xs font-semibold">Assign Team</button>
-                </div>
-              </div>
-            </div>
 
-            {/* Details Content */}
-            <div className="flex-1 overflow-y-auto px-5 py-4">
-              <div className="space-y-3">
-                <div className="p-3 rounded-lg border" style={{ background: 'var(--t-bg-elevated)', borderColor: 'var(--t-border)' }}>
-                  <div className="text-[9px] font-semibold uppercase mb-2" style={{ color: 'var(--t-text-muted)' }}>Details</div>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span style={{ color: 'var(--t-text-muted)' }}>Location</span>
-                      <span className="font-medium" style={{ color: 'var(--t-text-primary)' }}>{selectedPlot.data.area_name}</span>
-                    </div>
-                    {selectedPlot.type === 'flood' && (
-                      <>
-                        <div className="flex justify-between">
-                          <span style={{ color: 'var(--t-text-muted)' }}>Max Threshold</span>
-                          <span className="font-medium" style={{ color: 'var(--t-text-primary)' }}>{selectedPlot.data.max_threshold}cm</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span style={{ color: 'var(--t-text-muted)' }}>Warning Level</span>
-                          <span className="font-medium" style={{ color: 'var(--t-text-primary)' }}>{selectedPlot.data.warn_threshold}cm</span>
-                        </div>
-                      </>
-                    )}
-                    {selectedPlot.type === 'traffic' && (
-                      <>
-                        <div className="flex justify-between">
-                          <span style={{ color: 'var(--t-text-muted)' }}>Total Vehicles</span>
-                          <span className="font-medium" style={{ color: 'var(--t-text-primary)' }}>{selectedPlot.data.vehicle_count}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span style={{ color: 'var(--t-text-muted)' }}>Congestion %</span>
-                          <span className="font-medium" style={{ color: 'var(--t-text-primary)' }}>{selectedPlot.data.traffic_percentage}%</span>
-                        </div>
-                      </>
-                    )}
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="p-2.5 rounded-xl border" style={{ background: 'var(--t-bg-elevated)', borderColor: 'var(--t-border)' }}>
+                    <span className="text-[10px] text-slate-400 block font-bold">Severity</span>
+                    <span className="font-extrabold uppercase text-xs text-emerald-500">
+                      {selectedPlot.data.severity}
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-xl border" style={{ background: 'var(--t-bg-elevated)', borderColor: 'var(--t-border)' }}>
+                    <span className="text-[10px] text-slate-400 block font-bold">Sensor State</span>
+                    <span className="font-extrabold uppercase text-xs text-cyan-500">Online</span>
                   </div>
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="space-y-2.5">
+                <div className="p-3 rounded-2xl border" style={{ background: 'var(--t-bg-elevated)', borderColor: 'var(--t-border)' }}>
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-[11px] font-bold text-slate-400">Total Vehicle Count</span>
+                    <span className="text-base font-black text-amber-500">{selectedPlot.data.vehicle_count}</span>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                    <div 
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        selectedPlot.data.traffic_level === 'heavy' ? 'bg-rose-500' :
+                        selectedPlot.data.traffic_level === 'medium' ? 'bg-amber-500' : 'bg-emerald-400'
+                      }`}
+                      style={{ width: `${selectedPlot.data.traffic_percentage}%` }}
+                    />
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-1 text-right">
+                    {selectedPlot.data.traffic_percentage}% Road Capacity
+                  </div>
+                </div>
 
-            {/* Action Button */}
-            <div className="p-5 flex items-center gap-3" style={{ borderTop: '1px solid var(--t-border)' }}>
-              <button className="flex-1 py-2.5 rounded-lg bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 text-white text-sm font-bold uppercase tracking-wide transition-transform active:scale-[0.98] inline-flex items-center justify-center gap-2">
-                <MapPinned size={14} /> View Details
-              </button>
-              <a href={yoloStatus.running ? `http://127.0.0.1:9000/stream?ts=${Date.now()}` : '#'} target="_blank" rel="noreferrer" className="w-12 h-12 rounded-lg border flex items-center justify-center" style={{ borderColor: 'var(--t-border)', background: 'var(--t-bg-glass)' }}>
-                {yoloStatus.running ? <img src={`http://127.0.0.1:9000/stream?ts=${Date.now()}`} alt="cam" className="w-full h-full object-cover rounded-md"/> : <Camera size={16} style={{ color: 'var(--t-text-muted)' }} />}
-              </a>
-            </div>
+                {/* Class Breakdown */}
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="p-2 rounded-xl border" style={{ background: 'var(--t-bg-elevated)', borderColor: 'var(--t-border)' }}>
+                    <span className="text-[10px] text-slate-400 block">Cars</span>
+                    <span className="font-black text-slate-800 dark:text-white">{selectedPlot.data.cars || 0}</span>
+                  </div>
+                  <div className="p-2 rounded-xl border" style={{ background: 'var(--t-bg-elevated)', borderColor: 'var(--t-border)' }}>
+                    <span className="text-[10px] text-slate-400 block">Bikes</span>
+                    <span className="font-black text-slate-800 dark:text-white">{selectedPlot.data.bikes || 0}</span>
+                  </div>
+                  <div className="p-2 rounded-xl border" style={{ background: 'var(--t-bg-elevated)', borderColor: 'var(--t-border)' }}>
+                    <span className="text-[10px] text-slate-400 block">Trucks</span>
+                    <span className="font-black text-slate-800 dark:text-white">{selectedPlot.data.trucks || 0}</span>
+                  </div>
+                  <div className="p-2 rounded-xl border" style={{ background: 'var(--t-bg-elevated)', borderColor: 'var(--t-border)' }}>
+                    <span className="text-[10px] text-slate-400 block">Buses</span>
+                    <span className="font-black text-slate-800 dark:text-white">{selectedPlot.data.buses || 0}</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </motion.div>
         ) : (
+          /* DEFAULT OVERVIEW & INCIDENT STREAM */
           <motion.div
             key="overview"
             initial={{ opacity: 0 }}
@@ -224,143 +224,88 @@ export default function RightPanel({
             exit={{ opacity: 0 }}
             className="flex-1 flex flex-col overflow-hidden"
           >
-            {/* Command Control */}
-            <div className="p-5 space-y-3" style={{ borderBottom: '1px solid var(--t-border)' }}>
-              <div className="rounded-2xl border p-4" style={{ borderColor: 'var(--t-border)', background: 'var(--t-bg-surface)' }}>
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <Cpu size={16} className="text-cyan-400" />
-                    <h2 className="text-[11px] font-bold uppercase tracking-[0.16em] text-cyan-500">Live Traffic AI</h2>
-                  </div>
-                  <span className={`text-[10px] font-semibold ${yoloStatus.running ? 'text-emerald-400' : ''}`} style={yoloStatus.running ? {} : { color: 'var(--t-text-muted)' }}>
-                    {yoloStatus.running ? 'RUNNING' : 'IDLE'}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 mb-3">
-                  <div className="rounded-lg border p-2" style={{ borderColor: 'var(--t-border)', background: 'var(--t-bg-elevated)' }}>
-                    <div className="text-[9px] uppercase" style={{ color: 'var(--t-text-muted)' }}>Camera</div>
-                    <div className="mt-1 text-xs font-semibold flex items-center gap-1" style={{ color: 'var(--t-text-primary)' }}>
-                      <Camera size={11} className="text-cyan-400" /> {yoloStatus.camera ?? 0}
-                    </div>
-                  </div>
-                  <div className="rounded-lg border p-2" style={{ borderColor: 'var(--t-border)', background: 'var(--t-bg-elevated)' }}>
-                    <div className="text-[9px] uppercase" style={{ color: 'var(--t-text-muted)' }}>Area</div>
-                    <select
-                      value={selectedTrafficArea}
-                      onChange={(e) => onTrafficAreaChange(e.target.value)}
-                      className="mt-1 w-full rounded-md border px-2 py-1 text-xs font-semibold outline-none focus:border-cyan-400"
-                      style={{ borderColor: 'var(--t-border)', background: 'var(--t-bg-input)', color: 'var(--t-text-primary)' }}
-                    >
-                      {VADODARA_AREAS.map((area) => (
-                        <option key={area.name} value={area.name}>
-                          {area.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="rounded-lg border p-2" style={{ borderColor: 'var(--t-border)', background: 'var(--t-bg-elevated)' }}>
-                    <div className="text-[9px] uppercase" style={{ color: 'var(--t-text-muted)' }}>Runtime</div>
-                    <div className="mt-1 text-xs text-emerald-400 font-semibold truncate">{formatRuntime(yoloStatus.started_at)}</div>
-                  </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => onStartYolo(selectedTrafficArea, false)}
-                    disabled={isYoloBusy || yoloStatus.running}
-                    className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-500/90 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-2 text-xs font-bold text-white transition"
-                  >
-                    <Play size={13} /> Start Camera
-                  </button>
-                  <button
-                    onClick={onStopYolo}
-                    disabled={isYoloBusy || !yoloStatus.running}
-                    className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-rose-500/90 hover:bg-rose-500 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-2 text-xs font-bold text-white transition"
-                  >
-                    <Square size={12} /> Stop
-                  </button>
-                </div>
+            {/* Risk Summary Tiles */}
+            <div className="p-3.5 border-b grid grid-cols-2 gap-2" style={{ borderColor: 'var(--t-border)' }}>
+              <div className="p-2.5 rounded-xl border bg-rose-500/10 border-rose-500/20">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-rose-500 block">Flood Risk</span>
+                <span className="text-xl font-black text-rose-500">{dangerSensors} Sectors</span>
               </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20">
-                  <div className="text-[9px] font-semibold uppercase mb-1" style={{ color: 'var(--t-text-muted)' }}>Flood Risk</div>
-                  <div className="text-2xl font-bold text-red-400">{dangerSensors}</div>
-                </div>
-                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
-                  <div className="text-[9px] font-semibold uppercase mb-1" style={{ color: 'var(--t-text-muted)' }}>Heavy Traffic</div>
-                  <div className="text-2xl font-bold text-amber-400">{heavyTraffic}</div>
-                </div>
+              <div className="p-2.5 rounded-xl border bg-amber-500/10 border-amber-500/20">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500 block">Gridlock</span>
+                <span className="text-xl font-black text-amber-500">{heavyTraffic} Sectors</span>
               </div>
             </div>
 
-            {/* Real-Time Graph */}
-            <div className="p-5" style={{ borderBottom: '1px solid var(--t-border)' }}>
-              <h3 className="text-[9px] font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--t-text-muted)' }}>Live System Metrics</h3>
-              <div className="h-[120px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={graphData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--t-border)" vertical={false} opacity={0.5} />
-                      <XAxis dataKey="time" stroke="var(--t-text-muted)" fontSize={8} tickMargin={5} />
-                      <YAxis stroke="var(--t-text-muted)" fontSize={8} />
-                      <Tooltip 
-                        contentStyle={{ backgroundColor: 'var(--t-tooltip-bg)', borderColor: 'var(--t-border-glow)', borderRadius: '8px', fontSize: '10px', color: 'var(--t-text-primary)' }}
-                        itemStyle={{ fontSize: '10px', fontWeight: 'bold' }}
-                      />
-                      <Line type="monotone" dataKey="traffic" name="Traffic (%)" stroke="#38bdf8" strokeWidth={2} dot={false} />
-                      <Line type="monotone" dataKey="flood" name="Flood (cm)" stroke="#fbbf24" strokeWidth={2} dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
+            {/* Real-Time Sparkline */}
+            <div className="p-3.5 border-b" style={{ borderColor: 'var(--t-border)' }}>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">City Telemetry Trend</span>
+                <div className="flex items-center gap-2 text-[9px] font-semibold text-slate-400">
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-cyan-400 inline-block"/>Traffic</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block"/>Flood</span>
+                </div>
+              </div>
+              <div className="h-[95px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={graphData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--t-border-subtle)" vertical={false} />
+                    <XAxis dataKey="time" stroke="var(--t-text-muted)" fontSize={7} tickMargin={4} />
+                    <YAxis stroke="var(--t-text-muted)" fontSize={7} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: 'var(--t-tooltip-bg)', borderColor: 'var(--t-border)', borderRadius: '8px', fontSize: '10px', color: 'var(--t-text-primary)' }}
+                    />
+                    <Line type="monotone" dataKey="traffic" stroke="#38bdf8" strokeWidth={2} dot={false} isAnimationActive={false} />
+                    <Line type="monotone" dataKey="flood" stroke="#fbbf24" strokeWidth={2} dot={false} isAnimationActive={false} />
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
             </div>
 
-            {/* Alerts List */}
+            {/* Live Incident Stream */}
             <div className="flex-1 flex flex-col min-h-0">
-              <div className="px-5 pt-5 pb-3 flex items-center justify-between shrink-0">
-                <h3 className="text-[9px] font-bold uppercase tracking-widest flex items-center gap-2" style={{ color: 'var(--t-text-muted)' }}>
-                  <AlertTriangle size={12} className="text-blue-400" />
+              <div className="px-4 py-2.5 border-b flex items-center justify-between shrink-0" style={{ borderColor: 'var(--t-border)' }}>
+                <span className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 text-slate-400">
+                  <AlertTriangle size={12} className="text-amber-500" />
                   Incident Feed
-                </h3>
-                <span className="px-2 py-0.5 rounded bg-red-500/20 text-red-400 text-[8px] font-bold">
+                </span>
+                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-500/15 text-rose-500">
                   {unreadAlerts.length}
                 </span>
               </div>
 
-              <div className="flex-1 overflow-y-auto px-5 pb-5 space-y-2">
+              <div className="flex-1 overflow-y-auto p-3 space-y-2">
                 {alerts.length === 0 ? (
-                  <div className="flex items-center justify-center h-full text-sm" style={{ color: 'var(--t-text-muted)' }}>
-                    No active alerts
+                  <div className="flex items-center justify-center h-28 text-xs text-slate-400">
+                    No active emergency incidents
                   </div>
                 ) : (
-                  alerts.map((alert, i) => (
+                  alerts.slice(0, 15).map((alert, i) => (
                     <motion.div
                       key={alert.id}
-                      initial={{ opacity: 0, y: 10 }}
+                      initial={{ opacity: 0, y: 5 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.05 }}
-                      className={`p-3 rounded-lg border transition-colors ${
+                      className={`p-2.5 rounded-xl border transition-colors ${
                         alert.severity === 'danger'
-                          ? 'bg-red-500/10 border-red-500/20 hover:bg-red-500/15'
-                          : 'bg-cyan-500/10 border-cyan-500/20 hover:bg-cyan-500/15'
+                          ? 'bg-red-500/10 border-red-500/25'
+                          : 'bg-cyan-500/10 border-cyan-500/25'
                       }`}
                     >
-                      <div className="flex items-start gap-2.5">
-                        <div className={`shrink-0 w-1.5 h-1.5 rounded-full mt-1.5 ${
-                          alert.severity === 'danger' ? 'bg-red-400' : 'bg-cyan-400'
+                      <div className="flex items-start gap-2">
+                        <div className={`w-1.5 h-1.5 rounded-full mt-1 shrink-0 ${
+                          alert.severity === 'danger' ? 'bg-red-500' : 'bg-cyan-500'
                         }`} />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2 mb-0.5">
-                            <span className="text-[10px] font-bold" style={{ color: 'var(--t-text-primary)' }}>{alert.area_name}</span>
-                            <span className="text-[8px] shrink-0" style={{ color: 'var(--t-text-muted)' }}>{timeAgo(alert.created_at)}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex justify-between items-center gap-1">
+                            <span className="text-[10px] font-bold truncate" style={{ color: 'var(--t-text-primary)' }}>
+                              {alert.area_name}
+                            </span>
+                            <span className="text-[8px] text-slate-400 shrink-0 font-medium">
+                              {timeAgo(alert.created_at)}
+                            </span>
                           </div>
-                          <p className="text-[9px] leading-snug" style={{ color: 'var(--t-text-secondary)' }}>
+                          <p className="text-[9px] leading-snug mt-0.5 line-clamp-2" style={{ color: 'var(--t-text-secondary)' }}>
                             {alert.message}
                           </p>
-                          <div className="mt-2 flex items-center gap-2 text-[8px] uppercase tracking-wide" style={{ color: 'var(--t-text-muted)' }}>
-                            <span className="inline-flex items-center gap-1"><MapPinned size={10} />{alert.area_name}</span>
-                            <span className="inline-flex items-center gap-1"><Clock3 size={10} />{timeAgo(alert.created_at)}</span>
-                          </div>
                         </div>
                       </div>
                     </motion.div>

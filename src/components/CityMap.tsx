@@ -1,15 +1,15 @@
 /* ============================================
-   INTERACTIVE VADODARA MAP
-   Leaflet map with flood & traffic markers
+   INTERACTIVE VADODARA MAP — Enterprise Edition
+   Clean geospatial command viewport with multi-layer telemetry
    ============================================ */
 
 import { useEffect, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { AnimatePresence, motion } from 'framer-motion';
-import { Car, Droplets } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Car, Droplets, Layers, Navigation, Radio } from 'lucide-react';
 import { FloodSensor, TrafficData } from '../types';
-import { VADODARA_CENTER, MAP_ZOOM } from '../data';
+import { VADODARA_CENTER, MAP_ZOOM, VADODARA_AREAS } from '../data';
 
 interface CityMapProps {
   floodSensors: FloodSensor[];
@@ -25,11 +25,10 @@ interface SpreadPoint<T> {
   longitude: number;
 }
 
-type MapLayerMode = 'flood' | 'traffic';
+type MapLayerMode = 'all' | 'flood' | 'traffic';
 
-// Helper to create colored spots (Minimalist Glow Spots)
-const createSpotIcon = (className: string, size: number = 12) => {
-  // Outer circle only (no inner dot). Keep classes for color/glow styling.
+// Minimalist glowing telemetry marker
+const createSpotIcon = (className: string, size: number = 14) => {
   return L.divIcon({
     html: `<div class="glow-marker ${className}" style="width:${size}px; height:${size}px; border-radius:50%;"></div>`,
     className: '',
@@ -38,7 +37,6 @@ const createSpotIcon = (className: string, size: number = 12) => {
   });
 };
 
-// Auto-fit bounds component
 function MapBounds({ points }: { points: Array<{ latitude: number; longitude: number }> }) {
   const map = useMap();
   const fitted = useRef(false);
@@ -54,13 +52,22 @@ function MapBounds({ points }: { points: Array<{ latitude: number; longitude: nu
   return null;
 }
 
-// Resizes map when layout changes
+function MapFlyController({ targetCoord }: { targetCoord: [number, number] | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (targetCoord) {
+      map.flyTo(targetCoord, 15, { animate: true, duration: 1.2 });
+    }
+  }, [targetCoord, map]);
+  return null;
+}
+
 function MapResizer({ isSimplified }: { isSimplified: boolean }) {
   const map = useMap();
   useEffect(() => {
     const timeout = setTimeout(() => {
       map.invalidateSize();
-    }, 400); // Wait for transition
+    }, 350);
     return () => clearTimeout(timeout);
   }, [isSimplified, map]);
   return null;
@@ -68,7 +75,6 @@ function MapResizer({ isSimplified }: { isSimplified: boolean }) {
 
 function spreadFloodSensors(sensors: FloodSensor[]): SpreadPoint<FloodSensor>[] {
   const groups = new Map<string, FloodSensor[]>();
-
   sensors.forEach((sensor) => {
     const key = `${sensor.latitude.toFixed(4)}:${sensor.longitude.toFixed(4)}`;
     const existing = groups.get(key) ?? [];
@@ -88,8 +94,6 @@ function spreadFloodSensors(sensors: FloodSensor[]): SpreadPoint<FloodSensor>[] 
     }
 
     const [baseLat, baseLng] = key.split(':').map(Number);
-    const ringCount = Math.ceil(group.length / 6);
-
     group.forEach((item, index) => {
       const ringIndex = Math.floor(index / 6) + 1;
       const positionInRing = index % 6;
@@ -102,11 +106,6 @@ function spreadFloodSensors(sensors: FloodSensor[]): SpreadPoint<FloodSensor>[] 
         longitude: baseLng + Math.cos(angle) * radius * (1 / Math.max(Math.cos(baseLat * Math.PI / 180), 0.35)),
       });
     });
-
-    if (ringCount > 1) {
-      // keep the first point near the actual coordinate for easier recognition
-      spread.sort((a, b) => a.item.id.localeCompare(b.item.id));
-    }
   });
 
   return spread;
@@ -114,7 +113,6 @@ function spreadFloodSensors(sensors: FloodSensor[]): SpreadPoint<FloodSensor>[] 
 
 function spreadTrafficData(items: TrafficData[]): SpreadPoint<TrafficData>[] {
   const groups = new Map<string, TrafficData[]>();
-
   items.forEach((item) => {
     const key = `${item.latitude.toFixed(4)}:${item.longitude.toFixed(4)}`;
     const existing = groups.get(key) ?? [];
@@ -134,7 +132,6 @@ function spreadTrafficData(items: TrafficData[]): SpreadPoint<TrafficData>[] {
     }
 
     const [baseLat, baseLng] = key.split(':').map(Number);
-
     group.forEach((item, index) => {
       const ringIndex = Math.floor(index / 8) + 1;
       const positionInRing = index % 8;
@@ -155,81 +152,133 @@ function spreadTrafficData(items: TrafficData[]): SpreadPoint<TrafficData>[] {
 export default function CityMap({ floodSensors, trafficData, theme, isSimplified, onSelect }: CityMapProps) {
   const satelliteUrl = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
   const labelUrl = "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}";
-  const [activeLayer, setActiveLayer] = useState<MapLayerMode>('flood');
+  const [activeLayer, setActiveLayer] = useState<MapLayerMode>('all');
+  const [selectedHotspot, setSelectedHotspot] = useState<string>('all');
+  const [flyCoord, setFlyCoord] = useState<[number, number] | null>(null);
 
-  const visibleTraffic = activeLayer === 'traffic' ? trafficData : [];
-  const visibleFlood = activeLayer === 'flood' ? floodSensors : [];
-  const spreadTrafficPoints = activeLayer === 'traffic' ? spreadTrafficData(visibleTraffic) : [];
-  const spreadFloodPoints = activeLayer === 'flood' ? spreadFloodSensors(visibleFlood) : [];
-  const boundsPoints = activeLayer === 'traffic' ? visibleTraffic : visibleFlood;
-  const activeCount = activeLayer === 'traffic' ? trafficData.length : floodSensors.length;
-  const activeLabel = activeLayer === 'traffic' ? 'Traffic' : 'Flood';
-  const accentClass = activeLayer === 'traffic' ? 'from-amber-400 to-orange-500' : 'from-cyan-400 to-blue-500';
-  const activeButtonClass = activeLayer === 'traffic'
-    ? 'bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 shadow-[0_10px_30px_rgba(251,191,36,0.30)]'
-    : 'bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 shadow-[0_10px_30px_rgba(34,211,238,0.30)]';
+  const showTraffic = activeLayer === 'all' || activeLayer === 'traffic';
+  const showFlood = activeLayer === 'all' || activeLayer === 'flood';
+
+  const visibleTraffic = showTraffic ? trafficData : [];
+  const visibleFlood = showFlood ? floodSensors : [];
+  const spreadTrafficPoints = showTraffic ? spreadTrafficData(visibleTraffic) : [];
+  const spreadFloodPoints = showFlood ? spreadFloodSensors(visibleFlood) : [];
+  const boundsPoints = [...visibleTraffic, ...visibleFlood];
+
+  const handleHotspotChange = (areaName: string) => {
+    setSelectedHotspot(areaName);
+    if (areaName === 'all') {
+      setFlyCoord([VADODARA_CENTER.lat, VADODARA_CENTER.lng]);
+    } else {
+      const area = VADODARA_AREAS.find(a => a.name === areaName);
+      if (area) {
+        setFlyCoord([area.lat, area.lng]);
+      }
+    }
+  };
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ duration: 0.6 }}
-      className={`w-full h-full relative overflow-hidden transition-all duration-500 ${isSimplified ? '' : 'rounded-[28px] border'}`}
-      style={{ borderColor: 'var(--t-border)' }}
+      transition={{ duration: 0.4 }}
+      className="w-full h-full relative overflow-hidden"
     >
-      <div className="absolute top-5 left-1/2 -translate-x-1/2 z-[1000] pointer-events-none">
-        <div className="pointer-events-auto flex flex-col items-center gap-2">
-          <div className="flex items-center gap-2 rounded-full border border-white/10 bg-slate-950/70 backdrop-blur-xl p-1.5 shadow-2xl shadow-cyan-950/20 ring-1 ring-white/5">
-            <motion.button
-              layout
-              onClick={() => setActiveLayer('flood')}
-              whileTap={{ scale: 0.97 }}
-              whileHover={{ y: -1 }}
-              transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-              className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition-all duration-200 ${
-                activeLayer === 'flood'
-                  ? activeButtonClass
-                  : 'text-slate-300 hover:text-white hover:bg-white/6 border border-transparent'
-              }`}
-            >
-              <Droplets size={14} />
-              Flood
-            </motion.button>
-            <motion.button
-              layout
-              onClick={() => setActiveLayer('traffic')}
-              whileTap={{ scale: 0.97 }}
-              whileHover={{ y: -1 }}
-              transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-              className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition-all duration-200 ${
-                activeLayer === 'traffic'
-                  ? activeButtonClass
-                  : 'text-slate-300 hover:text-white hover:bg-white/6 border border-transparent'
-              }`}
-            >
-              <Car size={14} />
-              Traffic
-            </motion.button>
-          </div>
+      {/* 1. CENTER FLOATING LAYER SELECTOR */}
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] pointer-events-none">
+        <div className="pointer-events-auto flex items-center gap-1 rounded-full p-1 border shadow-xl backdrop-blur-xl"
+          style={{ background: 'var(--t-bg-glass)', borderColor: 'var(--t-border)' }}
+        >
+          <button
+            onClick={() => setActiveLayer('all')}
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+              activeLayer === 'all'
+                ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-md'
+                : 'hover:text-cyan-400'
+            }`}
+            style={activeLayer === 'all' ? {} : { color: 'var(--t-text-secondary)' }}
+          >
+            <Layers size={13} />
+            <span>All ({floodSensors.length + trafficData.length})</span>
+          </button>
 
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={`${activeLayer}-${activeCount}`}
-              initial={{ opacity: 0, y: -8, scale: 0.96 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -8, scale: 0.96 }}
-              transition={{ duration: 0.22, ease: 'easeOut' }}
-              className="flex items-center gap-2 rounded-full border backdrop-blur-lg px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.2em] shadow-lg"
-              style={{ borderColor: 'var(--t-border)', background: 'var(--t-bg-glass)', color: 'var(--t-text-primary)' }}
-            >
-              <span className={`h-2 w-2 rounded-full bg-gradient-to-r ${accentClass}`} />
-              <span>{activeLabel}</span>
-              <span style={{ color: 'var(--t-text-muted)' }} className="normal-case tracking-normal">{activeCount} spots</span>
-            </motion.div>
-          </AnimatePresence>
+          <button
+            onClick={() => setActiveLayer('flood')}
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+              activeLayer === 'flood'
+                ? 'bg-gradient-to-r from-cyan-500 to-teal-500 text-white shadow-md'
+                : 'hover:text-cyan-400'
+            }`}
+            style={activeLayer === 'flood' ? {} : { color: 'var(--t-text-secondary)' }}
+          >
+            <Droplets size={13} />
+            <span>Flood ({floodSensors.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveLayer('traffic')}
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+              activeLayer === 'traffic'
+                ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md'
+                : 'hover:text-amber-400'
+            }`}
+            style={activeLayer === 'traffic' ? {} : { color: 'var(--t-text-secondary)' }}
+          >
+            <Car size={13} />
+            <span>Traffic ({trafficData.length})</span>
+          </button>
         </div>
       </div>
 
+      {/* 2. TOP-LEFT SECTOR FOCUS DROPDOWN */}
+      <div className="absolute top-3 left-3 z-[1000] pointer-events-none hidden sm:block">
+        <div 
+          className="pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 rounded-xl border shadow-lg backdrop-blur-xl text-xs font-semibold"
+          style={{ background: 'var(--t-bg-glass)', borderColor: 'var(--t-border)', color: 'var(--t-text-primary)' }}
+        >
+          <Navigation size={13} className="text-cyan-500 shrink-0" />
+          <span className="text-[10px] uppercase font-bold text-slate-400">Sector:</span>
+          <select
+            value={selectedHotspot}
+            onChange={(e) => handleHotspotChange(e.target.value)}
+            className="bg-transparent font-bold outline-none cursor-pointer text-xs"
+            style={{ color: 'var(--t-text-primary)' }}
+          >
+            <option value="all" className="dark:bg-slate-900 dark:text-white bg-white text-slate-900">Vadodara Metropolitan</option>
+            {VADODARA_AREAS.map((a) => (
+              <option key={a.name} value={a.name} className="dark:bg-slate-900 dark:text-white bg-white text-slate-900">
+                {a.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* 3. BOTTOM-LEFT MINIMALIST TELEMETRY LEGEND */}
+      <div className="absolute bottom-3 left-3 z-[1000] pointer-events-none hidden md:block">
+        <div 
+          className="pointer-events-auto rounded-xl border p-2.5 shadow-lg backdrop-blur-xl text-[10px] space-y-1"
+          style={{ background: 'var(--t-bg-glass)', borderColor: 'var(--t-border)' }}
+        >
+          <div className="font-extrabold uppercase tracking-wider text-[9px] flex items-center gap-1.5 mb-1" style={{ color: 'var(--t-text-muted)' }}>
+            <Radio size={10} className="text-cyan-500 animate-pulse" /> Live Telemetry
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-cyan-400 shadow-sm" />
+            <span style={{ color: 'var(--t-text-secondary)' }}>Safe Water / Free Flow</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-amber-400 shadow-sm" />
+            <span style={{ color: 'var(--t-text-secondary)' }}>Warning Threshold / Moderate</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-rose-500 shadow-sm" />
+            <span className="font-bold text-rose-500">Critical Surge / Gridlock</span>
+          </div>
+        </div>
+      </div>
+
+      {/* MAP VIEWPORT */}
       <MapContainer
         center={[VADODARA_CENTER.lat, VADODARA_CENTER.lng]}
         zoom={MAP_ZOOM}
@@ -241,17 +290,17 @@ export default function CityMap({ floodSensors, trafficData, theme, isSimplified
         <TileLayer attribution="Labels" url={labelUrl} opacity={theme === 'dark' ? 0.85 : 0.65} />
 
         <MapBounds key={activeLayer} points={boundsPoints} />
+        <MapFlyController targetCoord={flyCoord} />
         <MapResizer isSimplified={isSimplified} />
 
         {/* TRAFFIC SPOTS */}
         {spreadTrafficPoints.map(({ item: td, latitude, longitude }) => {
           const className = `traffic-marker ${td.traffic_level}`;
-          // Slightly larger sizes to improve visibility
-          const size = td.traffic_level === 'heavy' ? 46 : td.traffic_level === 'medium' ? 36 : 30;
+          const size = td.traffic_level === 'heavy' ? 42 : td.traffic_level === 'medium' ? 32 : 26;
           
           return (
             <Marker
-              key={td.id}
+              key={`tr-${td.id}`}
               position={[latitude, longitude]}
               icon={createSpotIcon(className, size)}
               eventHandlers={{
@@ -259,9 +308,27 @@ export default function CityMap({ floodSensors, trafficData, theme, isSimplified
               }}
             >
               <Popup>
-                <div className="text-center p-1">
-                  <div className="font-bold text-sm mb-0.5">{td.area_name}</div>
-                  <div className="text-[10px] uppercase font-bold tracking-tight">{td.traffic_level} Traffic</div>
+                <div className="p-2 min-w-[140px] text-slate-900 dark:text-slate-100">
+                  <div className="flex items-center gap-1.5 mb-1 text-amber-500">
+                    <Car size={13} />
+                    <span className="text-[10px] uppercase font-bold tracking-wider">Traffic Node</span>
+                  </div>
+                  <div className="font-extrabold text-sm mb-1">{td.area_name}</div>
+                  <div className="flex justify-between text-xs mb-0.5">
+                    <span>Vehicles:</span>
+                    <span className="font-bold">{td.vehicle_count}</span>
+                  </div>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span>Road Density:</span>
+                    <span className="font-bold text-amber-500">{td.traffic_percentage}%</span>
+                  </div>
+                  <div className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full text-center mt-1 ${
+                    td.traffic_level === 'heavy' ? 'bg-red-500/20 text-red-500 border border-red-500/30' :
+                    td.traffic_level === 'medium' ? 'bg-amber-500/20 text-amber-500 border border-amber-500/30' :
+                    'bg-emerald-500/20 text-emerald-500 border border-emerald-500/30'
+                  }`}>
+                    {td.traffic_level} Flow
+                  </div>
                 </div>
               </Popup>
             </Marker>
@@ -270,18 +337,16 @@ export default function CityMap({ floodSensors, trafficData, theme, isSimplified
 
         {/* FLOOD SENSORS */}
         {spreadFloodPoints.map(({ item: sensor, latitude, longitude }) => {
-          // Inverted logic for dashboard: higher centimeters = safer, lower = danger
-          // Danger when water_level is below warn_threshold, warning when below max_threshold
-          const isDanger = sensor.water_level < (sensor.warn_threshold ?? 100);
-          const isWarning = !isDanger && sensor.water_level < (sensor.max_threshold ?? 180);
-          const severityClass = isDanger ? 'bg-red-500/20 border-2 border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.6)] pulse-red' : 
-                                isWarning ? 'bg-amber-500/20 border-2 border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.6)] pulse-amber' : 
-                                'bg-cyan-500/20 border-2 border-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.6)] pulse-cyan';
-          const size = isDanger ? 50 : isWarning ? 40 : 32;
+          const isDanger = sensor.severity === 'danger' || sensor.water_level >= (sensor.max_threshold ?? 180);
+          const isWarning = !isDanger && (sensor.severity === 'warning' || sensor.water_level >= (sensor.warn_threshold ?? 100));
+          const severityClass = isDanger ? 'bg-red-500/30 border-2 border-red-500 shadow-[0_0_16px_rgba(239,68,68,0.8)] pulse-red' : 
+                                isWarning ? 'bg-amber-500/30 border-2 border-amber-500 shadow-[0_0_14px_rgba(245,158,11,0.8)] pulse-amber' : 
+                                'bg-cyan-500/30 border-2 border-cyan-400 shadow-[0_0_12px_rgba(6,182,212,0.8)] pulse-cyan';
+          const size = isDanger ? 46 : isWarning ? 36 : 28;
 
           return (
             <Marker
-              key={sensor.id}
+              key={`fl-${sensor.id}`}
               position={[latitude, longitude]}
               icon={createSpotIcon(severityClass, size)}
               eventHandlers={{
@@ -289,35 +354,33 @@ export default function CityMap({ floodSensors, trafficData, theme, isSimplified
               }}
             >
               <Popup>
-                <div className="p-1 min-w-[140px]">
-                  <div className="flex items-center gap-2 mb-2 pb-1 border-b border-cyan-500/20">
-                    <Droplets size={12} className="text-cyan-400" />
-                    <span className="text-[10px] uppercase font-bold text-slate-300">Sensor: FLD-{sensor.id.substring(0,4).toUpperCase()}</span>
+                <div className="p-2 min-w-[150px] text-slate-900 dark:text-slate-100">
+                  <div className="flex items-center gap-1.5 mb-1 pb-1 border-b border-cyan-500/20">
+                    <Droplets size={13} className="text-cyan-500" />
+                    <span className="text-[10px] uppercase font-bold">Flood Sensor {sensor.id.substring(0, 6)}</span>
                   </div>
-                  <div className="font-bold text-sm text-white mb-1">{sensor.area_name}</div>
+                  <div className="font-extrabold text-sm mb-1">{sensor.area_name}</div>
                   <div className="flex justify-between text-xs mb-0.5">
-                    <span className="text-slate-400">Water Level:</span>
-                    <span className="font-bold text-cyan-300">{sensor.water_level.toFixed(1)} cm</span>
+                    <span>Water Level:</span>
+                    <span className="font-bold text-cyan-600 dark:text-cyan-400">{Number(sensor.water_level).toFixed(1)} cm</span>
                   </div>
-                  <div className="flex justify-between text-xs mb-0.5">
-                    <span className="text-slate-400">Battery:</span>
-                    <span className="font-bold text-emerald-400">81%</span>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span>Threshold:</span>
+                    <span>180 cm Max</span>
                   </div>
-                  <div className="flex justify-between text-xs mb-2">
-                    <span className="text-slate-400">Status:</span>
-                    <span className={`font-bold ${isDanger ? 'text-red-400' : isWarning ? 'text-amber-400' : 'text-emerald-400'}`}>
-                      {isDanger ? 'DANGER' : isWarning ? 'WARNING' : 'SAFE'}
-                    </span>
+                  <div className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full text-center mt-1 ${
+                    isDanger ? 'bg-red-500/20 text-red-500 border border-red-500/30' :
+                    isWarning ? 'bg-amber-500/20 text-amber-500 border border-amber-500/30' :
+                    'bg-emerald-500/20 text-emerald-500 border border-emerald-500/30'
+                  }`}>
+                    {isDanger ? 'Surge Danger' : isWarning ? 'Warning' : 'Normal'}
                   </div>
-                  <div className="text-[8px] text-slate-500 text-right mt-1 pt-1 border-t border-cyan-500/10">Last Update: Just now</div>
                 </div>
               </Popup>
             </Marker>
           );
         })}
       </MapContainer>
-
     </motion.div>
   );
 }
-

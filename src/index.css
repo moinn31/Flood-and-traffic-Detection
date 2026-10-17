@@ -21,78 +21,81 @@
 /* ============================================
    THEME TOKENS (Dark mode — default)
    ============================================ */
-:root {
+:root,
+html.dark {
   --primary-glow: rgba(6, 182, 212, 0.5);
 
-  --t-bg-body: #0a0e1a;
-  --t-bg-surface: rgba(17, 24, 39, 0.7);
-  --t-bg-glass: rgba(17, 24, 39, 0.5);
-  --t-bg-elevated: rgba(15, 23, 42, 0.6);
-  --t-bg-input: rgba(15, 23, 42, 0.9);
-  --t-bg-muted: rgba(55, 65, 81, 0.3);
-  --t-bg-inset: rgba(17, 24, 39, 0.4);
+  --t-bg-body: #070c18;
+  --t-bg-surface: rgba(13, 22, 38, 0.85);
+  --t-bg-glass: rgba(13, 22, 38, 0.7);
+  --t-bg-elevated: rgba(17, 28, 48, 0.75);
+  --t-bg-input: rgba(10, 18, 32, 0.92);
+  --t-bg-muted: rgba(55, 65, 81, 0.35);
+  --t-bg-inset: rgba(9, 15, 28, 0.7);
 
-  --t-border: rgba(55, 65, 81, 0.5);
-  --t-border-subtle: rgba(55, 65, 81, 0.2);
-  --t-border-glow: rgba(6, 182, 212, 0.3);
+  --t-border: rgba(51, 72, 104, 0.5);
+  --t-border-subtle: rgba(51, 72, 104, 0.25);
+  --t-border-glow: rgba(6, 182, 212, 0.4);
 
-  --t-text-primary: #f1f5f9;
-  --t-text-secondary: #94a3b8;
-  --t-text-muted: #64748b;
+  --t-text-primary: #f8fafc;
+  --t-text-secondary: #cbd5e1;
+  --t-text-muted: #94a3b8;
   --t-text-inverted: #0f172a;
 
-  --t-header-bg: linear-gradient(90deg, rgba(8,15,29,0.96) 0%, rgba(11,19,36,0.96) 55%, rgba(8,15,29,0.96) 100%);
-  --t-sidebar-bg: linear-gradient(180deg, rgba(4,10,24,0.92) 0%, rgba(7,18,34,0.94) 48%, rgba(4,10,24,0.98) 100%);
-  --t-right-panel-bg: linear-gradient(180deg, #031017 0%, #041526 50%, #03101a 100%);
-  --t-dashboard-wrapper: rgba(6, 11, 22, 0.35);
-  --t-dashboard-inner: rgba(15, 23, 42, 0.2);
+  --t-header-bg: rgba(9, 15, 28, 0.95);
+  --t-sidebar-bg: rgba(8, 14, 26, 0.95);
+  --t-right-panel-bg: rgba(8, 14, 26, 0.95);
+  --t-dashboard-wrapper: rgba(9, 15, 28, 0.6);
+  --t-dashboard-inner: rgba(6, 11, 20, 0.7);
 
-  --t-card-hover-shadow: rgba(6, 182, 212, 0.10);
-  --t-tooltip-bg: rgba(17, 24, 39, 0.95);
-  --t-overlay: rgba(0, 0, 0, 0.6);
+  --t-card-hover-shadow: rgba(6, 182, 212, 0.12);
+  --t-tooltip-bg: rgba(13, 22, 38, 0.98);
+  --t-overlay: rgba(0, 0, 0, 0.65);
 
-  --t-body-gradient: linear-gradient(180deg, #08111e 0%, #0b1324 48%, #050814 100%);
-  --t-body-radial1: radial-gradient(circle at 20% 20%, rgba(34, 211, 238, 0.10), transparent 28%);
-  --t-body-radial2: radial-gradient(circle at 80% 0%, rgba(59, 130, 246, 0.10), transparent 24%);
+  --t-body-gradient: linear-gradient(180deg, #070c18 0%, #0b1424 50%, #060913 100%);
+  --t-body-radial1: radial-gradient(circle at 20% 20%, rgba(34, 211, 238, 0.08), transparent 30%);
+  --t-body-radial2: radial-gradient(circle at 80% 0%, rgba(59, 130, 246, 0.08), transparent 26%);
 }
 
 /* ============================================
-   THEME TOKENS (Light mode)
+   THEME TOKENS (Light mode — crisp, high-contrast)
    ============================================ */
-[data-theme='light'] {
+[data-theme='light'],
+html:not(.dark) {
   --primary-glow: rgba(6, 182, 212, 0.3);
 
-  --t-bg-body: #f8fafc;
-  --t-bg-surface: rgba(255, 255, 255, 0.85);
-  --t-bg-glass: rgba(255, 255, 255, 0.7);
-  --t-bg-elevated: rgba(241, 245, 249, 0.9);
-  --t-bg-input: rgba(255, 255, 255, 0.95);
-  --t-bg-muted: rgba(203, 213, 225, 0.35);
-  --t-bg-inset: rgba(241, 245, 249, 0.6);
+  --t-bg-body: #f1f5f9;
+  --t-bg-surface: #ffffff;
+  --t-bg-glass: rgba(255, 255, 255, 0.92);
+  --t-bg-elevated: #f8fafc;
+  --t-bg-input: #ffffff;
+  --t-bg-muted: #e2e8f0;
+  --t-bg-inset: #f1f5f9;
 
-  --t-border: rgba(203, 213, 225, 0.6);
-  --t-border-subtle: rgba(203, 213, 225, 0.3);
-  --t-border-glow: rgba(6, 182, 212, 0.2);
+  --t-border: #cbd5e1;
+  --t-border-subtle: #e2e8f0;
+  --t-border-glow: rgba(6, 182, 212, 0.4);
 
   --t-text-primary: #0f172a;
-  --t-text-secondary: #475569;
+  --t-text-secondary: #334155;
   --t-text-muted: #64748b;
-  --t-text-inverted: #f1f5f9;
+  --t-text-inverted: #ffffff;
 
-  --t-header-bg: linear-gradient(90deg, rgba(248,250,252,0.97) 0%, rgba(241,245,249,0.97) 55%, rgba(248,250,252,0.97) 100%);
-  --t-sidebar-bg: linear-gradient(180deg, rgba(248,250,252,0.98) 0%, rgba(241,245,249,0.98) 48%, rgba(248,250,252,0.99) 100%);
-  --t-right-panel-bg: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 50%, #f8fafc 100%);
-  --t-dashboard-wrapper: rgba(255, 255, 255, 0.5);
-  --t-dashboard-inner: rgba(241, 245, 249, 0.5);
+  --t-header-bg: #ffffff;
+  --t-sidebar-bg: #ffffff;
+  --t-right-panel-bg: #ffffff;
+  --t-dashboard-wrapper: #ffffff;
+  --t-dashboard-inner: #f8fafc;
 
-  --t-card-hover-shadow: rgba(6, 182, 212, 0.08);
-  --t-tooltip-bg: rgba(255, 255, 255, 0.95);
-  --t-overlay: rgba(255, 255, 255, 0.6);
+  --t-card-hover-shadow: rgba(0, 0, 0, 0.08);
+  --t-tooltip-bg: #1e293b;
+  --t-overlay: rgba(15, 23, 42, 0.4);
 
-  --t-body-gradient: linear-gradient(180deg, #f8fbff 0%, #edf5ff 45%, #f8fafc 100%);
-  --t-body-radial1: radial-gradient(circle at 20% 20%, rgba(34, 211, 238, 0.06), transparent 28%);
-  --t-body-radial2: radial-gradient(circle at 80% 0%, rgba(59, 130, 246, 0.06), transparent 24%);
+  --t-body-gradient: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 50%, #e2e8f0 100%);
+  --t-body-radial1: none;
+  --t-body-radial2: none;
 }
+
 
 
 /* ============================================
@@ -160,23 +163,25 @@ body {
 
 .glass-card {
   background: var(--t-bg-surface);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--t-border);
-  border-radius: 20px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .glass-card:hover {
   border-color: var(--t-border-glow);
-  box-shadow: 0 0 40px var(--t-card-hover-shadow);
+  box-shadow: 0 4px 20px var(--t-card-hover-shadow);
 }
 
 .glass-card-sm {
   background: var(--t-bg-glass);
   backdrop-filter: blur(12px);
   border: 1px solid var(--t-border-subtle);
-  border-radius: 16px;
+  border-radius: 10px;
+  overflow: hidden;
 }
 
 /* ============================================

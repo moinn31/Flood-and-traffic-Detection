@@ -254,3 +254,101 @@ def insert_alert(alert: Dict[str, Any]) -> Dict[str, Any]:
         conn.commit()
         alert["id"] = rec_id
     return alert
+
+def clear_all_alerts():
+    with get_connection() as conn:
+        conn.execute("DELETE FROM alerts")
+        conn.commit()
+
+def reset_baseline():
+    """Reset all flood and traffic sensors to nominal safe baseline conditions."""
+    now = datetime.utcnow().isoformat()
+    with get_connection() as conn:
+        for idx, area in enumerate(VADODARA_AREAS):
+            # Safe water levels between 25 and 65 cm
+            nominal_water = 28.0 + (idx * 4.5) % 35
+            conn.execute("""
+            UPDATE flood_data 
+            SET water_level = ?, status = 'online', severity = 'safe', last_updated = ?
+            WHERE area_name = ?
+            """, (nominal_water, now, area["name"]))
+
+            # Nominal traffic
+            cars = 14 + (idx * 5) % 25
+            bikes = 8 + (idx * 3) % 18
+            trucks = 2 + (idx % 3)
+            buses = 1 + (idx % 2)
+            total = cars + bikes + trucks + buses
+            pct = min(100, int((total / 350) * 100))
+            conn.execute("""
+            UPDATE traffic_data
+            SET cars = ?, bikes = ?, trucks = ?, buses = ?, vehicle_count = ?, traffic_level = 'low', traffic_percentage = ?, last_updated = ?
+            WHERE area_name = ?
+            """, (cars, bikes, trucks, buses, total, pct, now, area["name"]))
+            
+        conn.execute("DELETE FROM alerts")
+        # Insert a clean system status alert
+        conn.execute("""
+        INSERT INTO alerts (id, alert_type, area_name, severity, message, created_at)
+        VALUES (?, 'system', 'Vadodara Central', 'info', 'Smart City telemetry re-calibrated to baseline normal state', ?)
+        """, (str(uuid.uuid4()), now))
+        conn.commit()
+
+def trigger_simulation(sim_type: str = "flood"):
+    """Simulate severe weather flood surge or peak traffic gridlock."""
+    now = datetime.utcnow().isoformat()
+    generated_alerts = []
+    with get_connection() as conn:
+        if sim_type == "flood":
+            hotspots = [
+                {"area": "Karelibaug", "level": 192.5, "severity": "danger"},
+                {"area": "Fatehgunj", "level": 184.0, "severity": "danger"},
+                {"area": "Sayajigunj", "level": 142.0, "severity": "warning"},
+                {"area": "Waghodia Road", "level": 115.0, "severity": "warning"},
+            ]
+            for h in hotspots:
+                conn.execute("""
+                UPDATE flood_data
+                SET water_level = ?, severity = ?, last_updated = ?
+                WHERE area_name = ?
+                """, (h["level"], h["severity"], now, h["area"]))
+                
+                alert_id = str(uuid.uuid4())
+                msg = f"Monsoon Surge Alert: Water level at {h['level']}cm in {h['area']}. Drainage overflow risk."
+                conn.execute("""
+                INSERT INTO alerts (id, alert_type, area_name, severity, message, created_at)
+                VALUES (?, 'flood', ?, ?, ?, ?)
+                """, (alert_id, h["area"], h["severity"], msg, now))
+                generated_alerts.append({"id": alert_id, "alert_type": "flood", "area_name": h["area"], "severity": h["severity"], "message": msg, "created_at": now})
+
+        elif sim_type == "traffic":
+            hotspots = [
+                {"area": "Alkapuri", "cars": 145, "bikes": 85, "trucks": 18, "buses": 14, "pct": 89, "level": "heavy"},
+                {"area": "Sayajigunj", "cars": 130, "bikes": 90, "trucks": 15, "buses": 12, "pct": 82, "level": "heavy"},
+                {"area": "Akota", "cars": 110, "bikes": 65, "trucks": 12, "buses": 8, "pct": 76, "level": "heavy"},
+            ]
+            for h in hotspots:
+                total = h["cars"] + h["bikes"] + h["trucks"] + h["buses"]
+                conn.execute("""
+                UPDATE traffic_data
+                SET cars = ?, bikes = ?, trucks = ?, buses = ?, vehicle_count = ?, traffic_level = ?, traffic_percentage = ?, last_updated = ?
+                WHERE area_name = ?
+                """, (h["cars"], h["bikes"], h["trucks"], h["buses"], total, h["level"], h["pct"], now, h["area"]))
+                
+                # History log
+                conn.execute("""
+                INSERT INTO traffic_history (id, area_name, vehicle_count, traffic_level, traffic_percentage, recorded_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """, (str(uuid.uuid4()), h["area"], total, h["level"], h["pct"], now))
+
+                alert_id = str(uuid.uuid4())
+                msg = f"Traffic Congestion Spike: {total} vehicles queuing in {h['area']} ({h['pct']}% road capacity)."
+                conn.execute("""
+                INSERT INTO alerts (id, alert_type, area_name, severity, message, created_at)
+                VALUES (?, 'traffic', ?, 'danger', ?, ?)
+                """, (alert_id, h["area"], msg, now))
+                generated_alerts.append({"id": alert_id, "alert_type": "traffic", "area_name": h["area"], "severity": "danger", "message": msg, "created_at": now})
+
+        conn.commit()
+    return generated_alerts
+

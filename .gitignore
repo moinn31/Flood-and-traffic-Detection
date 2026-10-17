@@ -22,3 +22,7 @@ rtdetr_model/*.safetensors
 
 # Logs
 *.log
+
+# Video / review temp files
+.codex-video-review/
+

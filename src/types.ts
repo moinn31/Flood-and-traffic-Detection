@@ -70,4 +70,6 @@ export interface YoloRuntimeStatus {
   confidence: number | null;
   started_at: string | null;
   command: string | null;
+  headless?: boolean;
 }
+

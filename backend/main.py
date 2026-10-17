@@ -21,7 +21,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from supabase import create_client, Client
@@ -110,6 +110,10 @@ class SensorStatusIn(BaseModel):
     sensor_id: str
     status: str  # "online" | "offline"
 
+class SimulationIn(BaseModel):
+    type: str = "flood"  # "flood" | "traffic"
+
+
 
 class YoloStartIn(BaseModel):
     camera: int = 0
@@ -182,16 +186,14 @@ def _repo_root() -> Path:
 
 
 def _yolo_script_path() -> Path:
-    rtdetr_script = _repo_root() / "rtdetr_service" / "rtdetr_service.py"
-    if rtdetr_script.exists():
-        return rtdetr_script
+    # Always use the fast, optimized YOLOv8 real-time service for instant startup & smooth streaming
     return _repo_root() / "yolo_service" / "yolo_service.py"
 
 
 def _yolo_model_path() -> Path:
-    rtdetr_dir = _repo_root() / "rtdetr_model"
-    if rtdetr_dir.exists():
-        return rtdetr_dir
+    yolo_file = _repo_root() / "yolov8n.pt"
+    if yolo_file.exists():
+        return yolo_file
     return _repo_root() / "yolo_service" / "yolov8n.pt"
 
 
@@ -470,6 +472,50 @@ async def get_alerts():
         print(f"Error fetching alerts: {e}")
         return []
 
+@app.post("/api/alerts/clear")
+async def clear_alerts():
+    try:
+        db_manager.clear_all_alerts()
+        await manager.broadcast({"type": "alerts_cleared"})
+        return {"status": "ok", "message": "All alerts cleared"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/simulate")
+async def simulate_event(data: SimulationIn):
+    try:
+        alerts = db_manager.trigger_simulation(data.type)
+        flood = db_manager.get_all_flood_data()
+        traffic = db_manager.get_all_traffic_data()
+        await manager.broadcast({
+            "type": "simulation_triggered",
+            "sim_type": data.type,
+            "flood": flood,
+            "traffic": traffic,
+            "alerts": alerts
+        })
+        return {"status": "ok", "type": data.type, "alerts_generated": len(alerts)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/simulate/reset")
+async def simulate_reset():
+    try:
+        db_manager.reset_baseline()
+        flood = db_manager.get_all_flood_data()
+        traffic = db_manager.get_all_traffic_data()
+        alerts = db_manager.get_all_alerts(10)
+        await manager.broadcast({
+            "type": "simulation_reset",
+            "flood": flood,
+            "traffic": traffic,
+            "alerts": alerts
+        })
+        return {"status": "ok", "message": "Baseline restored"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/sensor-status")
 async def update_sensor_status(data: SensorStatusIn):
     try:
@@ -494,6 +540,233 @@ async def update_sensor_status(data: SensorStatusIn):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# TRAFFIC AI MEDIA INFERENCE (IMAGE & VIDEO UPLOAD)
+# ============================================
+
+_yolo_model_cache = None
+
+def _get_yolo_model():
+    global _yolo_model_cache
+    if _yolo_model_cache is None:
+        from ultralytics import YOLO
+        model_path = ROOT_DIR / "yolov8n.pt"
+        if not model_path.exists():
+            model_path = ROOT_DIR / "yolo_service" / "yolov8n.pt"
+        if not model_path.exists():
+            model_path = Path("yolov8n.pt")
+        _yolo_model_cache = YOLO(str(model_path))
+    return _yolo_model_cache
+
+
+@app.post("/api/traffic/detect-media")
+async def detect_traffic_media(
+    file: UploadFile = File(...),
+    confidence: float = Form(0.30),
+    area: Optional[str] = Form("Alkapuri")
+):
+    """
+    Accepts an image or video file upload, runs YOLO vehicle detection,
+    and returns annotated imagery, bounding boxes, vehicle classifications,
+    and congestion metrics.
+    """
+    import cv2
+    import numpy as np
+    import base64
+    import tempfile
+    import time
+
+    start_time = time.time()
+    filename = (file.filename or "").lower()
+    is_video = any(filename.endswith(ext) for ext in [".mp4", ".avi", ".mov", ".mkv", ".webm"])
+
+    try:
+        model = _get_yolo_model()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load detection model: {e}")
+
+    # Vehicle COCO IDs: 2: car, 3: motorcycle, 5: bus, 7: truck
+    vehicle_map = {2: "car", 3: "bike", 5: "bus", 7: "truck"}
+    class_colors = {
+        "car": (255, 180, 0),     # Cyan / Light Blue (BGR: B, G, R)
+        "bike": (0, 220, 80),     # Emerald Green
+        "truck": (0, 165, 255),   # Orange / Amber
+        "bus": (200, 50, 220),    # Violet / Purple
+    }
+
+    if not is_video:
+        # Process Single Image
+        file_bytes = await file.read()
+        nparr = np.frombuffer(file_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img is None:
+            raise HTTPException(status_code=400, detail="Invalid image file format")
+
+        h, w, _ = img.shape
+        results = model.predict(img, conf=confidence, classes=[2, 3, 5, 7], verbose=False)
+        result = results[0]
+
+        counts = {"car": 0, "bike": 0, "truck": 0, "bus": 0}
+        detections = []
+
+        annotated = img.copy()
+
+        for box in result.boxes:
+            cls_id = int(box.cls[0].item())
+            conf_val = float(box.conf[0].item())
+            cls_name = vehicle_map.get(cls_id, "vehicle")
+            counts[cls_name] = counts.get(cls_name, 0) + 1
+
+            x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+            detections.append({
+                "class": cls_name,
+                "confidence": round(conf_val, 3),
+                "box": [x1, y1, x2, y2]
+            })
+
+            color = class_colors.get(cls_name, (0, 255, 255))
+            cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
+            label = f"{cls_name.upper()} {int(conf_val * 100)}%"
+            (lw, lh), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
+            cv2.rectangle(annotated, (x1, max(0, y1 - lh - 8)), (x1 + lw + 8, max(lh + 8, y1)), color, -1)
+            cv2.putText(annotated, label, (x1 + 4, max(lh + 4, y1 - 4)), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 0), 1, cv2.LINE_AA)
+
+        total_vehicles = counts["car"] + counts["bike"] + counts["truck"] + counts["bus"]
+        traffic_pct = min(100, int((total_vehicles / 35.0) * 100))
+        traffic_level = "heavy" if traffic_pct >= 70 else ("medium" if traffic_pct >= 35 else "low")
+
+        ret, buf = cv2.imencode(".jpg", annotated, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+        b64_img = f"data:image/jpeg;base64,{base64.b64encode(buf.tobytes()).decode('utf-8')}" if ret else ""
+
+        elapsed_ms = round((time.time() - start_time) * 1000, 1)
+
+        return {
+            "media_type": "image",
+            "filename": file.filename,
+            "area": area,
+            "total_vehicles": total_vehicles,
+            "cars": counts["car"],
+            "bikes": counts["bike"],
+            "trucks": counts["truck"],
+            "buses": counts["bus"],
+            "traffic_percentage": traffic_pct,
+            "traffic_level": traffic_level,
+            "inference_time_ms": elapsed_ms,
+            "annotated_preview": b64_img,
+            "detections": detections,
+            "dimensions": {"width": w, "height": h}
+        }
+    else:
+        # Process Video Upload
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
+            tmp.write(await file.read())
+            tmp_path = tmp.name
+
+        try:
+            cap = cv2.VideoCapture(tmp_path)
+            if not cap.isOpened():
+                raise HTTPException(status_code=400, detail="Cannot read uploaded video")
+
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            fps = float(cap.get(cv2.CAP_PROP_FPS) or 25.0)
+            duration_sec = round(total_frames / fps, 1) if fps > 0 else 0
+
+            # Sample frames (every 1 second or max 24 samples)
+            sample_interval = max(1, int(fps))
+            frame_indices = list(range(0, total_frames, sample_interval))[:24]
+
+            samples = []
+            max_detected = -1
+            best_annotated = None
+            total_cars, total_bikes, total_trucks, total_buses = 0, 0, 0, 0
+
+            for f_idx in frame_indices:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, f_idx)
+                ret, frame = cap.read()
+                if not ret:
+                    continue
+
+                res = model.predict(frame, conf=confidence, classes=[2, 3, 5, 7], verbose=False)[0]
+                c_counts = {"car": 0, "bike": 0, "truck": 0, "bus": 0}
+                for b in res.boxes:
+                    cls_id = int(b.cls[0].item())
+                    cls_name = vehicle_map.get(cls_id, "vehicle")
+                    c_counts[cls_name] = c_counts.get(cls_name, 0) + 1
+
+                f_total = sum(c_counts.values())
+                total_cars += c_counts["car"]
+                total_bikes += c_counts["bike"]
+                total_trucks += c_counts["truck"]
+                total_buses += c_counts["bus"]
+
+                samples.append({
+                    "second": round(f_idx / fps, 1),
+                    "vehicles": f_total,
+                    "cars": c_counts["car"],
+                    "bikes": c_counts["bike"],
+                    "trucks": c_counts["truck"],
+                    "buses": c_counts["bus"]
+                })
+
+                if f_total > max_detected or best_annotated is None:
+                    max_detected = f_total
+                    annotated = frame.copy()
+                    for box in res.boxes:
+                        cid = int(box.cls[0].item())
+                        cname = vehicle_map.get(cid, "vehicle")
+                        x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+                        color = class_colors.get(cname, (0, 255, 255))
+                        cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
+                        cv2.putText(annotated, cname.upper(), (x1, max(15, y1 - 5)), cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1)
+                    best_annotated = annotated
+
+            cap.release()
+
+            num_samples = len(samples) or 1
+            avg_vehicles = round(sum(s["vehicles"] for s in samples) / num_samples)
+            avg_cars = round(total_cars / num_samples)
+            avg_bikes = round(total_bikes / num_samples)
+            avg_trucks = round(total_trucks / num_samples)
+            avg_buses = round(total_buses / num_samples)
+
+            traffic_pct = min(100, int((avg_vehicles / 35.0) * 100))
+            traffic_level = "heavy" if traffic_pct >= 70 else ("medium" if traffic_pct >= 35 else "low")
+
+            b64_img = ""
+            if best_annotated is not None:
+                ret, buf = cv2.imencode(".jpg", best_annotated, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+                if ret:
+                    b64_img = f"data:image/jpeg;base64,{base64.b64encode(buf.tobytes()).decode('utf-8')}"
+
+            elapsed_ms = round((time.time() - start_time) * 1000, 1)
+
+            return {
+                "media_type": "video",
+                "filename": file.filename,
+                "area": area,
+                "duration_seconds": duration_sec,
+                "fps": fps,
+                "total_frames": total_frames,
+                "sampled_frames": len(samples),
+                "total_vehicles": avg_vehicles,
+                "peak_vehicles": max_detected,
+                "cars": avg_cars,
+                "bikes": avg_bikes,
+                "trucks": avg_trucks,
+                "buses": avg_buses,
+                "traffic_percentage": traffic_pct,
+                "traffic_level": traffic_level,
+                "inference_time_ms": elapsed_ms,
+                "annotated_preview": b64_img,
+                "timeline": samples
+            }
+        finally:
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
 
 
 
