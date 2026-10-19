@@ -13,11 +13,14 @@ import {
 import {
   Car, Bike, Truck, Bus, Camera, Upload, TrendingUp,
   MapPin, BarChart3, Eye, Zap, AlertTriangle, Play,
-  CheckCircle2, RefreshCw, X, Download, ShieldCheck, Cpu, Layers
+  CheckCircle2, RefreshCw, X, Download, ShieldCheck, Cpu, Layers,
+  Compass, Route as RouteIcon, ArrowRight, ShieldAlert
 } from 'lucide-react';
 import { TrafficData, Alert } from '../types';
 import { VADODARA_AREAS } from '../data';
+import { VADODARA_ROUTE_PROFILES } from '../routingData';
 import { useToast } from '../components/ToastSystem';
+
 
 interface TrafficPageProps {
   trafficData: TrafficData[];
@@ -848,6 +851,104 @@ export default function TrafficAI({ trafficData, alerts }: TrafficPageProps) {
                   </ResponsiveContainer>
                 </div>
               </div>
+
+              {/* Smart Detour & Rerouting Advisor for Selected Area */}
+              {VADODARA_ROUTE_PROFILES[selectedArea] && (
+                <div className="glass-card p-4 border border-cyan-500/20 col-span-1 lg:col-span-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-3 pb-2 border-b border-[var(--t-border-subtle)]">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-500">
+                        <RouteIcon size={18} />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold flex items-center gap-2" style={{ color: 'var(--t-text-primary)' }}>
+                          Smart Traffic Detour & Rerouting Advisory
+                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 font-mono">
+                            {selectedArea}
+                          </span>
+                        </h4>
+                        <p className="text-[11px]" style={{ color: 'var(--t-text-muted)' }}>
+                          Dynamic AI congestion-evasion routing for Vadodara Municipal Corridors
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="px-2.5 py-1 rounded-lg border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400 font-semibold flex items-center gap-1.5">
+                        <ShieldAlert size={13} />
+                        Avoid: {VADODARA_ROUTE_PROFILES[selectedArea].blockedCorridor.name}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Blocked corridor notice */}
+                  <div className="rounded-xl border border-red-500/25 bg-red-500/5 p-3 mb-4">
+                    <div className="flex items-start gap-2.5">
+                      <AlertTriangle size={16} className="text-red-500 shrink-0 mt-0.5" />
+                      <div>
+                        <div className="text-xs font-bold text-red-600 dark:text-red-400">
+                          Bottleneck / Hazard Warning: {VADODARA_ROUTE_PROFILES[selectedArea].blockedCorridor.name}
+                        </div>
+                        <p className="text-[11px] mt-0.5" style={{ color: 'var(--t-text-secondary)' }}>
+                          {VADODARA_ROUTE_PROFILES[selectedArea].blockedCorridor.description}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 2 Alternative Detours */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {VADODARA_ROUTE_PROFILES[selectedArea].detours.map((detour, idx) => (
+                      <div
+                        key={detour.id}
+                        className="rounded-xl border p-3.5 transition-all hover:border-cyan-500/40"
+                        style={{
+                          borderColor: idx === 0 ? 'rgba(6, 182, 212, 0.35)' : 'rgba(16, 185, 129, 0.35)',
+                          background: 'var(--t-bg-elevated)',
+                        }}
+                      >
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            idx === 0
+                              ? 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400'
+                              : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                          }`}>
+                            {idx === 0 ? 'Primary Detour' : 'Secondary Detour'}
+                          </span>
+                          <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
+                            {detour.elevation}
+                          </span>
+                        </div>
+
+                        <h5 className="text-xs font-bold" style={{ color: 'var(--t-text-primary)' }}>
+                          {detour.name}
+                        </h5>
+                        <p className="text-[11px] text-cyan-600 dark:text-cyan-400 font-medium mb-1.5">
+                          Via: {detour.via}
+                        </p>
+
+                        <div className="flex items-center gap-3 text-[11px] font-mono font-bold mb-3 pb-2 border-b border-[var(--t-border-subtle)]">
+                          <span className="text-cyan-600 dark:text-cyan-400">{detour.distanceDelta}</span>
+                          <span style={{ color: 'var(--t-text-muted)' }}>•</span>
+                          <span className="text-emerald-600 dark:text-emerald-400">{detour.timeEstimate}</span>
+                        </div>
+
+                        {/* Step by step navigation */}
+                        <div className="space-y-1.5">
+                          <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--t-text-muted)' }}>
+                            Step-by-Step Navigation:
+                          </div>
+                          {detour.instructions.map((st: string, sIdx: number) => (
+                            <div key={sIdx} className="flex items-start gap-1.5 text-[11px]">
+                              <ArrowRight size={12} className="text-cyan-500 shrink-0 mt-0.5" />
+                              <span style={{ color: 'var(--t-text-secondary)' }}>{st}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

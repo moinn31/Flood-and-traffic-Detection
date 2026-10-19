@@ -580,3 +580,111 @@ body {
   border-color: var(--t-border) !important;
   color: var(--t-text-primary) !important;
 }
+
+/* ============================================
+   GEOSPATIAL AREA STATUS BADGES & ROUTE STYLES
+   ============================================ */
+.area-map-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  user-select: none;
+}
+
+.area-map-badge:hover {
+  transform: scale(1.08) translateY(-2px);
+  z-index: 9999 !important;
+}
+
+.area-map-badge .status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.area-map-badge .area-title {
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.area-map-badge .area-badge-sub {
+  font-size: 9.5px;
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+/* Safe / Operational State */
+.area-status-safe {
+  background: rgba(8, 20, 36, 0.88);
+  border: 1px solid rgba(16, 185, 129, 0.6);
+  color: #f1f5f9;
+}
+.area-status-safe .status-dot {
+  background: #10b981;
+  box-shadow: 0 0 8px #10b981;
+}
+
+/* Warning State */
+.area-status-warn {
+  background: rgba(35, 22, 5, 0.92);
+  border: 1.5px solid rgba(245, 158, 11, 0.85);
+  color: #fef3c7;
+}
+.area-status-warn .status-dot {
+  background: #f59e0b;
+  box-shadow: 0 0 10px #f59e0b;
+}
+
+/* Danger / Hazard State */
+.area-status-danger {
+  background: rgba(45, 8, 15, 0.95);
+  border: 2px solid rgba(239, 68, 68, 0.95);
+  color: #fee2e2;
+  animation: danger-badge-pulse 2s infinite;
+}
+.area-status-danger .status-dot {
+  background: #ef4444;
+  box-shadow: 0 0 12px #ef4444;
+}
+
+@keyframes danger-badge-pulse {
+  0%, 100% {
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(239, 68, 68, 0.95), 0 0 35px rgba(239, 68, 68, 0.6);
+  }
+}
+
+/* Light mode overrides */
+[data-theme='light'] .area-status-safe {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1.5px solid #10b981;
+  color: #064e3b;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+}
+[data-theme='light'] .area-status-warn {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1.5px solid #f59e0b;
+  color: #78350f;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+}
+[data-theme='light'] .area-status-danger {
+  background: rgba(255, 255, 255, 0.98);
+  border: 2px solid #ef4444;
+  color: #7f1d1d;
+  box-shadow: 0 2px 12px rgba(239, 68, 68, 0.25);
+}
+

@@ -352,3 +352,112 @@ def trigger_simulation(sim_type: str = "flood"):
         conn.commit()
     return generated_alerts
 
+
+def override_area_condition(
+    area_name: str,
+    water_level: Optional[float] = None,
+    cars: Optional[int] = None,
+    bikes: Optional[int] = None,
+    trucks: Optional[int] = None,
+    buses: Optional[int] = None,
+    vehicle_count: Optional[int] = None,
+    traffic_percentage: Optional[int] = None,
+    status: str = "online",
+) -> Dict[str, Any]:
+    """Directly override flood and/or traffic telemetry for a specific sector (e.g., Alkapuri)."""
+    now = datetime.utcnow().isoformat()
+    matched_area = next((a for a in VADODARA_AREAS if a["name"].lower() == area_name.lower()), None)
+    canon_name = matched_area["name"] if matched_area else area_name
+    lat = matched_area["lat"] if matched_area else 22.3072
+    lng = matched_area["lng"] if matched_area else 73.1812
+
+    result: Dict[str, Any] = {"area_name": canon_name, "alerts": []}
+
+    with get_connection() as conn:
+        # 1. Update Flood if water_level is provided
+        if water_level is not None:
+            w_level = max(0.0, float(water_level))
+            severity = "danger" if w_level >= 180.0 else ("warning" if w_level >= 100.0 else "safe")
+            rec_id = f"FS-{str(uuid.uuid4())[:8]}"
+
+            conn.execute("""
+            INSERT INTO flood_data (id, sensor_name, area_name, latitude, longitude, water_level, max_threshold, warn_threshold, status, severity, last_updated)
+            VALUES (?, ?, ?, ?, ?, ?, 180, 100, ?, ?, ?)
+            ON CONFLICT(area_name) DO UPDATE SET
+                water_level = excluded.water_level,
+                status = excluded.status,
+                severity = excluded.severity,
+                last_updated = excluded.last_updated
+            """, (rec_id, f"Sensor {canon_name}", canon_name, lat, lng, w_level, status, severity, now))
+
+            updated_flood = conn.execute("SELECT * FROM flood_data WHERE area_name = ?", (canon_name,)).fetchone()
+            result["flood"] = dict(updated_flood) if updated_flood else None
+
+            if severity in ["warning", "danger"]:
+                alert_id = str(uuid.uuid4())
+                msg = f"Hydrodynamic Surge in {canon_name}: Water level measured at {w_level:.1f}cm (Threshold: 180cm)."
+                conn.execute("""
+                INSERT INTO alerts (id, alert_type, area_name, severity, message, created_at)
+                VALUES (?, 'flood', ?, ?, ?, ?)
+                """, (alert_id, canon_name, severity, msg, now))
+                result["alerts"].append({"id": alert_id, "alert_type": "flood", "area_name": canon_name, "severity": severity, "message": msg, "created_at": now})
+
+        # 2. Update Traffic if any traffic field is provided
+        has_traffic_input = any(v is not None for v in [cars, bikes, trucks, buses, vehicle_count, traffic_percentage])
+        if has_traffic_input:
+            existing_tr = conn.execute("SELECT * FROM traffic_data WHERE area_name = ?", (canon_name,)).fetchone()
+            c = cars if cars is not None else (existing_tr["cars"] if existing_tr else 15)
+            b = bikes if bikes is not None else (existing_tr["bikes"] if existing_tr else 10)
+            t = trucks if trucks is not None else (existing_tr["trucks"] if existing_tr else 3)
+            bu = buses if buses is not None else (existing_tr["buses"] if existing_tr else 2)
+
+            if vehicle_count is not None:
+                tot = max(0, int(vehicle_count))
+            else:
+                tot = c + b + t + bu
+
+            if traffic_percentage is not None:
+                pct = min(100, max(0, int(traffic_percentage)))
+            else:
+                pct = min(100, int((tot / 350) * 100))
+
+            level = "heavy" if pct >= 75 else ("medium" if pct >= 40 else "low")
+            rec_id = f"TR-{str(uuid.uuid4())[:8]}"
+
+            conn.execute("""
+            INSERT INTO traffic_data (id, area_name, latitude, longitude, cars, bikes, trucks, buses, vehicle_count, traffic_level, traffic_percentage, last_updated)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(area_name) DO UPDATE SET
+                cars = excluded.cars,
+                bikes = excluded.bikes,
+                trucks = excluded.trucks,
+                buses = excluded.buses,
+                vehicle_count = excluded.vehicle_count,
+                traffic_level = excluded.traffic_level,
+                traffic_percentage = excluded.traffic_percentage,
+                last_updated = excluded.last_updated
+            """, (rec_id, canon_name, lat, lng, c, b, t, bu, tot, level, pct, now))
+
+            # Add to history
+            conn.execute("""
+            INSERT INTO traffic_history (id, area_name, vehicle_count, traffic_level, traffic_percentage, recorded_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """, (str(uuid.uuid4()), canon_name, tot, level, pct, now))
+
+            updated_tr = conn.execute("SELECT * FROM traffic_data WHERE area_name = ?", (canon_name,)).fetchone()
+            result["traffic"] = dict(updated_tr) if updated_tr else None
+
+            if level == "heavy":
+                alert_id = str(uuid.uuid4())
+                msg = f"Traffic Gridlock in {canon_name}: {tot} vehicles queuing ({pct}% road capacity). Detour advised."
+                conn.execute("""
+                INSERT INTO alerts (id, alert_type, area_name, severity, message, created_at)
+                VALUES (?, 'traffic', ?, 'danger', ?, ?)
+                """, (alert_id, canon_name, msg, now))
+                result["alerts"].append({"id": alert_id, "alert_type": "traffic", "area_name": canon_name, "severity": "danger", "message": msg, "created_at": now})
+
+        conn.commit()
+
+    return result
+
+

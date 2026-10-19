@@ -12,10 +12,12 @@ import {
 import {
   Droplets, Wifi, WifiOff, AlertTriangle,
   TrendingUp, Clock, MapPin, Gauge, BarChart3,
-  Waves, ShieldCheck, Activity, Compass, ArrowUpRight
+  Waves, ShieldCheck, Activity, Compass, ArrowUpRight,
+  Route as RouteIcon, ShieldAlert, ArrowRight
 } from 'lucide-react';
 import { FloodSensor, Alert } from '../types';
 import { generateWaterLevelHistory } from '../data';
+import { VADODARA_ROUTE_PROFILES } from '../routingData';
 
 interface FloodPageProps {
   floodSensors: FloodSensor[];
@@ -350,6 +352,119 @@ export default function FloodMonitor({ floodSensors, alerts }: FloodPageProps) {
                       />
                     </AreaChart>
                   </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+
+            {/* Smart Flood Evacuation & Detour Corridor */}
+            {selected && VADODARA_ROUTE_PROFILES[selected.area_name] && (
+              <div className="glass-card p-4 border border-cyan-500/20">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-3 pb-2 border-b border-[var(--t-border-subtle)]">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-500">
+                      <RouteIcon size={18} />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold flex items-center gap-2" style={{ color: 'var(--t-text-primary)' }}>
+                        Smart Flood Evacuation & Bypass Corridors
+                        <span className="text-[11px] px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 font-mono">
+                          {selected.area_name}
+                        </span>
+                      </h4>
+                      <p className="text-[11px]" style={{ color: 'var(--t-text-muted)' }}>
+                        Municipal hydrodynamic emergency routes and high-ground diversions
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2.5 py-1 rounded-lg border text-xs font-semibold flex items-center gap-1.5 ${
+                      selectedSeverity === 'danger'
+                        ? 'border-red-500/40 bg-red-500/15 text-red-600 dark:text-red-400'
+                        : selectedSeverity === 'warning'
+                        ? 'border-amber-500/40 bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                        : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                    }`}>
+                      <ShieldAlert size={13} />
+                      {selectedSeverity === 'danger'
+                        ? `CRITICAL SUBMERGENCE: Avoid ${VADODARA_ROUTE_PROFILES[selected.area_name].blockedCorridor.name}`
+                        : selectedSeverity === 'warning'
+                        ? `SURGE WARNING: Monitor ${VADODARA_ROUTE_PROFILES[selected.area_name].blockedCorridor.name}`
+                        : `CORRIDOR NOMINAL: ${VADODARA_ROUTE_PROFILES[selected.area_name].blockedCorridor.name} Clear`}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Submergence Warning Box */}
+                <div className={`rounded-xl border p-3 mb-3 ${
+                  selectedSeverity === 'danger'
+                    ? 'border-red-500/30 bg-red-500/10'
+                    : selectedSeverity === 'warning'
+                    ? 'border-amber-500/30 bg-amber-500/10'
+                    : 'border-cyan-500/20 bg-cyan-500/5'
+                }`}>
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle size={16} className={`shrink-0 mt-0.5 ${
+                      selectedSeverity === 'danger' ? 'text-red-500' : selectedSeverity === 'warning' ? 'text-amber-500' : 'text-cyan-500'
+                    }`} />
+                    <div>
+                      <div className="text-xs font-bold" style={{ color: 'var(--t-text-primary)' }}>
+                        Low-Lying Choke Point: {VADODARA_ROUTE_PROFILES[selected.area_name].blockedCorridor.name}
+                      </div>
+                      <p className="text-[11px] mt-0.5" style={{ color: 'var(--t-text-secondary)' }}>
+                        {VADODARA_ROUTE_PROFILES[selected.area_name].blockedCorridor.description}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Detour cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {VADODARA_ROUTE_PROFILES[selected.area_name].detours.map((detour, idx) => (
+                    <div
+                      key={detour.id}
+                      className="rounded-xl border p-3 transition-all"
+                      style={{
+                        borderColor: idx === 0 ? 'rgba(6, 182, 212, 0.35)' : 'rgba(16, 185, 129, 0.35)',
+                        background: 'var(--t-bg-elevated)',
+                      }}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          idx === 0
+                            ? 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400'
+                            : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                        }`}>
+                          {idx === 0 ? 'Primary High-Ground Bypass' : 'Secondary Flood Detour'}
+                        </span>
+                        <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
+                          {detour.elevation}
+                        </span>
+                      </div>
+
+                      <h5 className="text-xs font-bold" style={{ color: 'var(--t-text-primary)' }}>
+                        {detour.name}
+                      </h5>
+                      <p className="text-[11px] text-cyan-600 dark:text-cyan-400 font-medium mb-1">
+                        Via: {detour.via}
+                      </p>
+
+                      <div className="flex items-center gap-3 text-[11px] font-mono font-bold mb-2 pb-1.5 border-b border-[var(--t-border-subtle)]">
+                        <span className="text-cyan-600 dark:text-cyan-400">{detour.distanceDelta}</span>
+                        <span style={{ color: 'var(--t-text-muted)' }}>•</span>
+                        <span className="text-emerald-600 dark:text-emerald-400">{detour.timeEstimate}</span>
+                      </div>
+
+                      <div className="space-y-1">
+                        {detour.instructions.map((st: string, sIdx: number) => (
+                          <div key={sIdx} className="flex items-start gap-1.5 text-[11px]">
+                            <ArrowRight size={11} className="text-cyan-500 shrink-0 mt-0.5" />
+                            <span style={{ color: 'var(--t-text-secondary)' }}>{st}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

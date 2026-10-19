@@ -1,15 +1,19 @@
 /* ============================================
    INTERACTIVE VADODARA MAP — Enterprise Edition
-   Clean geospatial command viewport with multi-layer telemetry
+   Multi-layer telemetry with Smart AI Rerouting & Area Status Badges
    ============================================ */
 
-import { useEffect, useRef, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { useEffect, useRef, useState, useMemo } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, Tooltip, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { motion } from 'framer-motion';
-import { Car, Droplets, Layers, Navigation, Radio } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Car, Droplets, Layers, Navigation, Radio, AlertTriangle, 
+  CheckCircle2, Compass, ArrowRight, Route, Eye, EyeOff, ShieldCheck, X
+} from 'lucide-react';
 import { FloodSensor, TrafficData } from '../types';
 import { VADODARA_CENTER, MAP_ZOOM, VADODARA_AREAS } from '../data';
+import { VADODARA_ROUTE_PROFILES, getRouteAdviceForArea } from '../routingData';
 
 interface CityMapProps {
   floodSensors: FloodSensor[];
@@ -17,6 +21,7 @@ interface CityMapProps {
   theme: 'light' | 'dark';
   isSimplified: boolean;
   onSelect?: (item: { type: 'flood' | 'traffic', data: any }) => void;
+  selectedAreaName?: string;
 }
 
 interface SpreadPoint<T> {
@@ -25,15 +30,32 @@ interface SpreadPoint<T> {
   longitude: number;
 }
 
-type MapLayerMode = 'all' | 'flood' | 'traffic';
+type MapLayerMode = 'all' | 'flood' | 'traffic' | 'routes';
 
-// Minimalist glowing telemetry marker
+// Glowing telemetry spot marker
 const createSpotIcon = (className: string, size: number = 14) => {
   return L.divIcon({
     html: `<div class="glow-marker ${className}" style="width:${size}px; height:${size}px; border-radius:50%;"></div>`,
     className: '',
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
+  });
+};
+
+// High-contrast Area Status Badge Marker
+const createAreaBadgeIcon = (areaName: string, statusType: 'safe' | 'warn' | 'danger', statText: string) => {
+  const statusClass = statusType === 'danger' ? 'area-status-danger' : statusType === 'warn' ? 'area-status-warn' : 'area-status-safe';
+  return L.divIcon({
+    html: `
+      <div class="area-map-badge ${statusClass}">
+        <span class="status-dot"></span>
+        <span class="area-title">${areaName}</span>
+        <span class="area-badge-sub">• ${statText}</span>
+      </div>
+    `,
+    className: '',
+    iconSize: [160, 26],
+    iconAnchor: [80, 13],
   });
 };
 
@@ -44,7 +66,7 @@ function MapBounds({ points }: { points: Array<{ latitude: number; longitude: nu
   useEffect(() => {
     if (!fitted.current && points.length > 0) {
       const bounds = L.latLngBounds(points.map(point => [point.latitude, point.longitude]));
-      map.fitBounds(bounds.pad(0.2));
+      map.fitBounds(bounds.pad(0.18));
       fitted.current = true;
     }
   }, [points, map]);
@@ -149,15 +171,39 @@ function spreadTrafficData(items: TrafficData[]): SpreadPoint<TrafficData>[] {
   return spread;
 }
 
-export default function CityMap({ floodSensors, trafficData, theme, isSimplified, onSelect }: CityMapProps) {
+export default function CityMap({ 
+  floodSensors, 
+  trafficData, 
+  theme, 
+  isSimplified, 
+  onSelect,
+  selectedAreaName
+}: CityMapProps) {
   const satelliteUrl = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
   const labelUrl = "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}";
+  
   const [activeLayer, setActiveLayer] = useState<MapLayerMode>('all');
   const [selectedHotspot, setSelectedHotspot] = useState<string>('all');
   const [flyCoord, setFlyCoord] = useState<[number, number] | null>(null);
+  const [showAreaBadges, setShowAreaBadges] = useState<boolean>(true);
+  const [activeAdvisorArea, setActiveAdvisorArea] = useState<string | null>('Alkapuri');
+  const [advisorMinimized, setAdvisorMinimized] = useState<boolean>(false);
+
+  // Sync external selected area prop
+  useEffect(() => {
+    if (selectedAreaName && selectedAreaName !== 'all') {
+      setSelectedHotspot(selectedAreaName);
+      setActiveAdvisorArea(selectedAreaName);
+      const matched = VADODARA_AREAS.find(a => a.name.toLowerCase() === selectedAreaName.toLowerCase());
+      if (matched) {
+        setFlyCoord([matched.lat, matched.lng]);
+      }
+    }
+  }, [selectedAreaName]);
 
   const showTraffic = activeLayer === 'all' || activeLayer === 'traffic';
   const showFlood = activeLayer === 'all' || activeLayer === 'flood';
+  const showRoutesLayer = activeLayer === 'all' || activeLayer === 'routes';
 
   const visibleTraffic = showTraffic ? trafficData : [];
   const visibleFlood = showFlood ? floodSensors : [];
@@ -165,17 +211,81 @@ export default function CityMap({ floodSensors, trafficData, theme, isSimplified
   const spreadFloodPoints = showFlood ? spreadFloodSensors(visibleFlood) : [];
   const boundsPoints = [...visibleTraffic, ...visibleFlood];
 
+  // Evaluate telemetry status for all 11 Vadodara sectors
+  const sectorEvaluations = useMemo(() => {
+    return VADODARA_AREAS.map(area => {
+      const flood = floodSensors.find(f => f.area_name.toLowerCase() === area.name.toLowerCase());
+      const traffic = trafficData.find(t => t.area_name.toLowerCase() === area.name.toLowerCase());
+
+      const waterLevel = flood ? flood.water_level : 0;
+      const trafficPct = traffic ? traffic.traffic_percentage : 20;
+
+      const isFloodDanger = waterLevel >= 180 || flood?.severity === 'danger';
+      const isTrafficDanger = trafficPct >= 75 || traffic?.traffic_level === 'heavy';
+      const isFloodWarn = !isFloodDanger && (waterLevel >= 100 || flood?.severity === 'warning');
+      const isTrafficWarn = !isTrafficDanger && (trafficPct >= 50 || traffic?.traffic_level === 'medium');
+
+      const isDanger = isFloodDanger || isTrafficDanger;
+      const isWarn = !isDanger && (isFloodWarn || isTrafficWarn);
+
+      let statusType: 'safe' | 'warn' | 'danger' = 'safe';
+      let statText = 'Operational • Safe';
+
+      if (isDanger) {
+        statusType = 'danger';
+        statText = isFloodDanger ? `SURGE ${waterLevel.toFixed(0)}cm` : `JAM ${trafficPct}%`;
+      } else if (isWarn) {
+        statusType = 'warn';
+        statText = isFloodWarn ? `Watch ${waterLevel.toFixed(0)}cm` : `Moderate ${trafficPct}%`;
+      }
+
+      const routeAdvice = getRouteAdviceForArea(area.name, waterLevel, trafficPct);
+
+      return {
+        area,
+        waterLevel,
+        trafficPct,
+        statusType,
+        statText,
+        isDanger,
+        isWarn,
+        flood,
+        traffic,
+        routeAdvice,
+      };
+    });
+  }, [floodSensors, trafficData]);
+
+  // Determine areas that currently have active hazards
+  const hazardSectors = useMemo(() => {
+    return sectorEvaluations.filter(s => s.isDanger);
+  }, [sectorEvaluations]);
+
+  // Automatically switch active advisor to any sector with hazard if not manually chosen
+  useEffect(() => {
+    if (hazardSectors.length > 0 && (!activeAdvisorArea || !hazardSectors.some(h => h.area.name === activeAdvisorArea))) {
+      setActiveAdvisorArea(hazardSectors[0].area.name);
+    }
+  }, [hazardSectors, activeAdvisorArea]);
+
   const handleHotspotChange = (areaName: string) => {
     setSelectedHotspot(areaName);
     if (areaName === 'all') {
       setFlyCoord([VADODARA_CENTER.lat, VADODARA_CENTER.lng]);
+      if (hazardSectors.length > 0) {
+        setActiveAdvisorArea(hazardSectors[0].area.name);
+      }
     } else {
       const area = VADODARA_AREAS.find(a => a.name === areaName);
       if (area) {
         setFlyCoord([area.lat, area.lng]);
+        setActiveAdvisorArea(area.name);
       }
     }
   };
+
+  const currentAdvisorSector = sectorEvaluations.find(s => s.area.name === activeAdvisorArea) || sectorEvaluations[0];
+  const currentRouteProfile = VADODARA_ROUTE_PROFILES[currentAdvisorSector?.area.name || 'Alkapuri'] || VADODARA_ROUTE_PROFILES['Alkapuri'];
 
   return (
     <motion.div
@@ -184,7 +294,7 @@ export default function CityMap({ floodSensors, trafficData, theme, isSimplified
       transition={{ duration: 0.4 }}
       className="w-full h-full relative overflow-hidden"
     >
-      {/* 1. CENTER FLOATING LAYER SELECTOR */}
+      {/* 1. TOP CENTER FLOATING LAYER SELECTOR */}
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] pointer-events-none">
         <div className="pointer-events-auto flex items-center gap-1 rounded-full p-1 border shadow-xl backdrop-blur-xl"
           style={{ background: 'var(--t-bg-glass)', borderColor: 'var(--t-border)' }}
@@ -227,11 +337,24 @@ export default function CityMap({ floodSensors, trafficData, theme, isSimplified
             <Car size={13} />
             <span>Traffic ({trafficData.length})</span>
           </button>
+
+          <button
+            onClick={() => setActiveLayer('routes')}
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+              activeLayer === 'routes'
+                ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md'
+                : 'hover:text-emerald-400'
+            }`}
+            style={activeLayer === 'routes' ? {} : { color: 'var(--t-text-secondary)' }}
+          >
+            <Route size={13} />
+            <span>AI Routes</span>
+          </button>
         </div>
       </div>
 
-      {/* 2. TOP-LEFT SECTOR FOCUS DROPDOWN */}
-      <div className="absolute top-3 left-3 z-[1000] pointer-events-none hidden sm:block">
+      {/* 2. TOP-LEFT CONTROLS: SECTOR JUMP & AREA BADGE TOGGLE */}
+      <div className="absolute top-3 left-3 z-[1000] pointer-events-none flex items-center gap-2">
         <div 
           className="pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 rounded-xl border shadow-lg backdrop-blur-xl text-xs font-semibold"
           style={{ background: 'var(--t-bg-glass)', borderColor: 'var(--t-border)', color: 'var(--t-text-primary)' }}
@@ -244,7 +367,7 @@ export default function CityMap({ floodSensors, trafficData, theme, isSimplified
             className="bg-transparent font-bold outline-none cursor-pointer text-xs"
             style={{ color: 'var(--t-text-primary)' }}
           >
-            <option value="all" className="dark:bg-slate-900 dark:text-white bg-white text-slate-900">Vadodara Metropolitan</option>
+            <option value="all" className="dark:bg-slate-900 dark:text-white bg-white text-slate-900">Vadodara Metropolitan (All 11)</option>
             {VADODARA_AREAS.map((a) => (
               <option key={a.name} value={a.name} className="dark:bg-slate-900 dark:text-white bg-white text-slate-900">
                 {a.name}
@@ -252,31 +375,187 @@ export default function CityMap({ floodSensors, trafficData, theme, isSimplified
             ))}
           </select>
         </div>
+
+        <button
+          onClick={() => setShowAreaBadges(prev => !prev)}
+          className="pointer-events-auto flex items-center gap-1 px-2.5 py-1.5 rounded-xl border shadow-lg backdrop-blur-xl text-[11px] font-bold transition hover:scale-105 cursor-pointer"
+          style={{ 
+            background: showAreaBadges ? 'var(--t-bg-elevated)' : 'var(--t-bg-glass)', 
+            borderColor: 'var(--t-border)', 
+            color: showAreaBadges ? '#06b6d4' : 'var(--t-text-muted)' 
+          }}
+          title="Toggle Area Status Labels on the Map"
+        >
+          {showAreaBadges ? <Eye size={13} /> : <EyeOff size={13} />}
+          <span>{showAreaBadges ? 'Labels On' : 'Labels Off'}</span>
+        </button>
       </div>
 
-      {/* 3. BOTTOM-LEFT MINIMALIST TELEMETRY LEGEND */}
+      {/* 3. BOTTOM-LEFT TELEMETRY & ROUTE LEGEND */}
       <div className="absolute bottom-3 left-3 z-[1000] pointer-events-none hidden md:block">
         <div 
-          className="pointer-events-auto rounded-xl border p-2.5 shadow-lg backdrop-blur-xl text-[10px] space-y-1"
+          className="pointer-events-auto rounded-xl border p-2.5 shadow-lg backdrop-blur-xl text-[10px] space-y-1.5 min-w-[175px]"
           style={{ background: 'var(--t-bg-glass)', borderColor: 'var(--t-border)' }}
         >
-          <div className="font-extrabold uppercase tracking-wider text-[9px] flex items-center gap-1.5 mb-1" style={{ color: 'var(--t-text-muted)' }}>
-            <Radio size={10} className="text-cyan-500 animate-pulse" /> Live Telemetry
+          <div className="font-extrabold uppercase tracking-wider text-[9px] flex items-center justify-between mb-1" style={{ color: 'var(--t-text-muted)' }}>
+            <span className="flex items-center gap-1.5">
+              <Radio size={10} className="text-cyan-500 animate-pulse" /> Live Telemetry
+            </span>
+            <span className="text-[9px] text-emerald-500 font-bold">11 Sectors</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-sm" />
+            <span style={{ color: 'var(--t-text-secondary)' }}>Safe / Operational Flow</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-cyan-400 shadow-sm" />
-            <span style={{ color: 'var(--t-text-secondary)' }}>Safe Water / Free Flow</span>
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-sm" />
+            <span style={{ color: 'var(--t-text-secondary)' }}>Warning Threshold (&ge;100cm)</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-amber-400 shadow-sm" />
-            <span style={{ color: 'var(--t-text-secondary)' }}>Warning Threshold / Moderate</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-rose-500 shadow-sm" />
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-sm animate-ping" />
             <span className="font-bold text-rose-500">Critical Surge / Gridlock</span>
+          </div>
+
+          <div className="pt-1.5 border-t border-slate-700/30 flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <span className="w-3.5 h-0.5 bg-red-500 border-b border-dashed border-red-500" />
+              <span className="text-rose-400 font-semibold">Blocked Arterial Road</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-3.5 h-1 rounded bg-cyan-400" />
+              <span className="text-cyan-400 font-semibold">Recommended Bypass 1</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-3.5 h-1 rounded bg-emerald-400" />
+              <span className="text-emerald-400 font-semibold">Alternative Bypass 2</span>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* 4. FLOATING SMART DETOUR ADVISOR (COLLAPSIBLE) */}
+      <AnimatePresence>
+        {activeAdvisorArea && currentRouteProfile && (
+          <motion.div
+            initial={{ opacity: 0, x: 20, y: 10 }}
+            animate={{ opacity: 1, x: 0, y: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            className="absolute bottom-3 right-3 z-[1000] pointer-events-none max-w-[360px] w-full"
+          >
+            <div 
+              className="pointer-events-auto rounded-2xl border p-3.5 shadow-2xl backdrop-blur-xl transition-all"
+              style={{ background: 'var(--t-bg-surface)', borderColor: 'var(--t-border)' }}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between gap-2 pb-2 mb-2 border-b" style={{ borderColor: 'var(--t-border)' }}>
+                <div className="flex items-center gap-2">
+                  <div className={`p-1.5 rounded-lg ${currentAdvisorSector.isDanger ? 'bg-rose-500/15 text-rose-500' : currentAdvisorSector.isWarn ? 'bg-amber-500/15 text-amber-500' : 'bg-emerald-500/15 text-emerald-500'}`}>
+                    <Compass size={16} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-extrabold text-xs" style={{ color: 'var(--t-text-primary)' }}>
+                        Smart Route Advisor: {currentAdvisorSector.area.name}
+                      </span>
+                      {currentAdvisorSector.isDanger ? (
+                        <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black uppercase bg-red-500/20 text-red-500 border border-red-500/30">Hazard</span>
+                      ) : (
+                        <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold uppercase bg-emerald-500/20 text-emerald-500 border border-emerald-500/30">Safe</span>
+                      )}
+                    </div>
+                    <div className="text-[10px]" style={{ color: 'var(--t-text-muted)' }}>
+                      Water: {currentAdvisorSector.waterLevel.toFixed(1)}cm • Traffic: {currentAdvisorSector.trafficPct}%
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setAdvisorMinimized(prev => !prev)}
+                    className="p-1 rounded-lg hover:bg-slate-500/10 text-slate-400 hover:text-slate-200 text-xs font-bold"
+                  >
+                    {advisorMinimized ? 'Expand' : 'Hide'}
+                  </button>
+                  <button
+                    onClick={() => setActiveAdvisorArea(null)}
+                    className="p-1 rounded-lg hover:bg-slate-500/10 text-slate-400 hover:text-slate-200"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              </div>
+
+              {!advisorMinimized && (
+                <div className="space-y-2 text-xs">
+                  {/* Status alert box */}
+                  <div className={`p-2 rounded-xl text-[11px] leading-tight ${currentAdvisorSector.isDanger ? 'bg-rose-500/10 border border-rose-500/30 text-rose-400 font-semibold' : 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'}`}>
+                    {currentAdvisorSector.isDanger ? (
+                      <div className="flex items-start gap-1.5">
+                        <AlertTriangle size={13} className="shrink-0 mt-0.5 text-rose-500" />
+                        <div>
+                          <strong>Caution:</strong> {currentRouteProfile.blockedCorridor.name} is obstructed ({currentAdvisorSector.statText}). Reroute active!
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <ShieldCheck size={13} className="text-emerald-500 shrink-0" />
+                        <span>All roads in {currentAdvisorSector.area.name} are operational. Nominal throughput.</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Detour Recommendation List */}
+                  <div className="space-y-1.5">
+                    <div className="text-[10px] uppercase font-extrabold tracking-wider" style={{ color: 'var(--t-text-muted)' }}>
+                      Recommended Bypass Paths:
+                    </div>
+
+                    {currentRouteProfile.detours.map((d, idx) => (
+                      <div
+                        key={d.id}
+                        onClick={() => {
+                          if (d.coordinates.length > 0) {
+                            setFlyCoord(d.coordinates[0]);
+                          }
+                        }}
+                        className={`p-2 rounded-xl border transition cursor-pointer hover:border-cyan-400 ${idx === 0 ? 'border-cyan-500/30 bg-cyan-500/5' : 'border-emerald-500/25 bg-emerald-500/5'}`}
+                      >
+                        <div className="flex items-center justify-between text-[11px] font-bold mb-0.5">
+                          <span className={idx === 0 ? 'text-cyan-400' : 'text-emerald-400'}>
+                            {idx === 0 ? '★ ' : '• '} {d.name}
+                          </span>
+                          <span className="font-mono text-[10px] text-slate-400">
+                            {d.timeEstimate} ({d.distanceDelta})
+                          </span>
+                        </div>
+                        <div className="text-[10px] font-medium leading-relaxed" style={{ color: 'var(--t-text-secondary)' }}>
+                          {d.via}
+                        </div>
+                        <div className="text-[9px] mt-1 font-semibold text-emerald-500">
+                          {d.elevation}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Focus Action */}
+                  <div className="flex justify-between items-center pt-1 text-[10px]">
+                    <span className="text-slate-400">Click any detour to fly & preview</span>
+                    <button
+                      onClick={() => setFlyCoord(currentRouteProfile.center)}
+                      className="text-cyan-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>Focus {currentAdvisorSector.area.name}</span>
+                      <ArrowRight size={11} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* MAP VIEWPORT */}
       <MapContainer
@@ -293,7 +572,127 @@ export default function CityMap({ floodSensors, trafficData, theme, isSimplified
         <MapFlyController targetCoord={flyCoord} />
         <MapResizer isSimplified={isSimplified} />
 
-        {/* TRAFFIC SPOTS */}
+        {/* 1. SECTOR STATUS BADGE MARKERS (ALL 11 SECTORS LABELED) */}
+        {showAreaBadges && sectorEvaluations.map(({ area, statusType, statText, waterLevel, trafficPct }) => {
+          return (
+            <Marker
+              key={`badge-${area.name}`}
+              position={[area.lat, area.lng]}
+              icon={createAreaBadgeIcon(area.name, statusType, statText)}
+              eventHandlers={{
+                click: () => {
+                  setSelectedHotspot(area.name);
+                  setActiveAdvisorArea(area.name);
+                  setFlyCoord([area.lat, area.lng]);
+                }
+              }}
+            >
+              <Popup>
+                <div className="p-2 min-w-[170px] text-slate-900 dark:text-slate-100">
+                  <div className="flex items-center justify-between pb-1 mb-1 border-b border-slate-300 dark:border-slate-700">
+                    <span className="font-extrabold text-sm">{area.name}</span>
+                    <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full ${statusType === 'danger' ? 'bg-red-500/20 text-red-500' : statusType === 'warn' ? 'bg-amber-500/20 text-amber-500' : 'bg-emerald-500/20 text-emerald-500'}`}>
+                      {statusType}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs mb-0.5">
+                    <span>Hydro Water Level:</span>
+                    <span className="font-bold text-cyan-600 dark:text-cyan-400">{waterLevel.toFixed(1)} cm</span>
+                  </div>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span>Traffic Congestion:</span>
+                    <span className="font-bold text-amber-500">{trafficPct}%</span>
+                  </div>
+                  <button
+                    onClick={() => setActiveAdvisorArea(area.name)}
+                    className="w-full mt-1.5 py-1 text-center bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg text-xs font-bold transition cursor-pointer"
+                  >
+                    View Reroute & Detours
+                  </button>
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
+
+        {/* 2. REROUTING & HAZARD POLYLINES */}
+        {showRoutesLayer && Object.entries(VADODARA_ROUTE_PROFILES).map(([areaName, profile]) => {
+          const matchingSector = sectorEvaluations.find(s => s.area.name.toLowerCase() === areaName.toLowerCase());
+          const isHazard = matchingSector ? matchingSector.isDanger : false;
+          const isFocused = activeAdvisorArea?.toLowerCase() === areaName.toLowerCase();
+
+          // Only render polylines if area is hazardous or user specifically focused on this area
+          if (!isHazard && !isFocused) return null;
+
+          return (
+            <div key={`routes-${areaName}`}>
+              {/* Blocked corridor (Red Dashed Line with Hazard Tooltip) */}
+              <Polyline
+                positions={profile.blockedCorridor.coordinates}
+                pathOptions={{
+                  color: '#ef4444',
+                  weight: isFocused ? 7 : 5,
+                  dashArray: '8, 8',
+                  opacity: 0.95,
+                }}
+              >
+                <Tooltip sticky>
+                  <div className="text-xs font-bold text-red-600 dark:text-red-400">
+                    🚫 BLOCKED: {profile.blockedCorridor.name}
+                    <div className="text-[10px] font-normal text-slate-300">
+                      {profile.blockedCorridor.description}
+                    </div>
+                  </div>
+                </Tooltip>
+              </Polyline>
+
+              {/* Primary Recommended Detour (Vivid Cyan Line) */}
+              {profile.detours[0] && (
+                <Polyline
+                  positions={profile.detours[0].coordinates}
+                  pathOptions={{
+                    color: '#06b6d4',
+                    weight: isFocused ? 6 : 4,
+                    opacity: 0.95,
+                  }}
+                >
+                  <Tooltip sticky>
+                    <div className="text-xs font-bold text-cyan-500">
+                      ✅ RECOMMENDED BYPASS: {profile.detours[0].name}
+                      <div className="text-[10px] font-normal text-slate-200">
+                        {profile.detours[0].via} ({profile.detours[0].timeEstimate}, {profile.detours[0].distanceDelta})
+                      </div>
+                    </div>
+                  </Tooltip>
+                </Polyline>
+              )}
+
+              {/* Secondary Alternative Detour (Emerald Dashed Line) */}
+              {profile.detours[1] && (
+                <Polyline
+                  positions={profile.detours[1].coordinates}
+                  pathOptions={{
+                    color: '#10b981',
+                    weight: isFocused ? 5 : 3.5,
+                    dashArray: '6, 8',
+                    opacity: 0.85,
+                  }}
+                >
+                  <Tooltip sticky>
+                    <div className="text-xs font-bold text-emerald-500">
+                      • ALTERNATIVE DETOUR: {profile.detours[1].name}
+                      <div className="text-[10px] font-normal text-slate-200">
+                        {profile.detours[1].via} ({profile.detours[1].distanceDelta})
+                      </div>
+                    </div>
+                  </Tooltip>
+                </Polyline>
+              )}
+            </div>
+          );
+        })}
+
+        {/* 3. TRAFFIC SENSOR SPOTS */}
         {spreadTrafficPoints.map(({ item: td, latitude, longitude }) => {
           const className = `traffic-marker ${td.traffic_level}`;
           const size = td.traffic_level === 'heavy' ? 42 : td.traffic_level === 'medium' ? 32 : 26;
@@ -335,7 +734,7 @@ export default function CityMap({ floodSensors, trafficData, theme, isSimplified
           );
         })}
 
-        {/* FLOOD SENSORS */}
+        {/* 4. FLOOD SENSOR SPOTS */}
         {spreadFloodPoints.map(({ item: sensor, latitude, longitude }) => {
           const isDanger = sensor.severity === 'danger' || sensor.water_level >= (sensor.max_threshold ?? 180);
           const isWarning = !isDanger && (sensor.severity === 'warning' || sensor.water_level >= (sensor.warn_threshold ?? 100));

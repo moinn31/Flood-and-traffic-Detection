@@ -114,6 +114,21 @@ class SimulationIn(BaseModel):
     type: str = "flood"  # "flood" | "traffic"
 
 
+class IoTTelemetryIn(BaseModel):
+    device_id: Optional[str] = "ESP32-VADODARA"
+    area_name: str
+    water_level: Optional[float] = None
+    cars: Optional[int] = None
+    bikes: Optional[int] = None
+    trucks: Optional[int] = None
+    buses: Optional[int] = None
+    vehicle_count: Optional[int] = None
+    traffic_percentage: Optional[int] = None
+    status: Optional[str] = "online"
+    battery_pct: Optional[float] = None
+
+
+
 
 class YoloStartIn(BaseModel):
     camera: int = 0
@@ -514,6 +529,54 @@ async def simulate_reset():
         return {"status": "ok", "message": "Baseline restored"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/iot/ingest")
+@app.post("/api/simulate/area")
+async def ingest_iot_telemetry(payload: IoTTelemetryIn):
+    """
+    Ingest live telemetry from real IoT hardware (ESP32 / ultrasonic / sensors)
+    or custom scenario override. Immediately updates local SQLite and broadcasts
+    to Leaflet map clients via WebSocket.
+    """
+    try:
+        res = db_manager.override_area_condition(
+            area_name=payload.area_name,
+            water_level=payload.water_level,
+            cars=payload.cars,
+            bikes=payload.bikes,
+            trucks=payload.trucks,
+            buses=payload.buses,
+            vehicle_count=payload.vehicle_count,
+            traffic_percentage=payload.traffic_percentage,
+            status=payload.status or "online",
+        )
+
+        # Broadcast flood update if changed
+        if res.get("flood"):
+            await manager.broadcast({"type": "flood_update", "data": res["flood"]})
+
+        # Broadcast traffic update if changed
+        if res.get("traffic"):
+            await manager.broadcast({"type": "traffic_update", "data": res["traffic"]})
+
+        # Broadcast any new alerts generated
+        for alert in res.get("alerts", []):
+            await manager.broadcast({"type": "alert", "data": alert})
+
+        return {
+            "status": "ok",
+            "device_id": payload.device_id,
+            "area_name": res["area_name"],
+            "flood": res.get("flood"),
+            "traffic": res.get("traffic"),
+            "alerts_generated": len(res.get("alerts", [])),
+            "message": f"Telemetry ingested for {res['area_name']} successfully."
+        }
+    except Exception as e:
+        print(f"Error in iot/ingest: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @app.post("/api/sensor-status")

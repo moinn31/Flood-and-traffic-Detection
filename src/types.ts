@@ -73,3 +73,30 @@ export interface YoloRuntimeStatus {
   headless?: boolean;
 }
 
+export interface IoTTelemetryPayload {
+  device_id?: string;
+  area_name: string;
+  water_level?: number;
+  cars?: number;
+  bikes?: number;
+  trucks?: number;
+  buses?: number;
+  vehicle_count?: number;
+  traffic_percentage?: number;
+  status?: string;
+  battery_pct?: number;
+}
+
+export interface DetourRoute {
+  id: string;
+  name: string;
+  via: string;
+  distanceDelta: string;
+  timeEstimate: string;
+  elevation: string;
+  status: 'recommended' | 'alternative' | 'emergency-only';
+  instructions: string[];
+  coordinates: [number, number][];
+}
+
+

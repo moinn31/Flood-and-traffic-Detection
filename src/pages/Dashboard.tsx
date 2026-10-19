@@ -5,9 +5,11 @@ import RightPanel from '../components/RightPanel';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Waves, Car, Cpu, RefreshCw, FileText, 
-  X, Printer, ShieldAlert, PanelRightClose, PanelRight
+  X, Printer, ShieldAlert, PanelRightClose, PanelRight, Radio, Route, Compass
 } from 'lucide-react';
 import { useToast } from '../components/ToastSystem';
+import IoTIncidentModal from '../components/IoTIncidentModal';
+
 
 interface DashboardProps {
   floodSensors: FloodSensor[];
@@ -43,7 +45,10 @@ export default function Dashboard({
   const [selectedPlot, setSelectedPlot] = useState<{ type: 'flood' | 'traffic', data: any } | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
+  const [showIoTModal, setShowIoTModal] = useState(false);
+  const [focusedAreaName, setFocusedAreaName] = useState<string>('Alkapuri');
   const { addToast } = useToast();
+
 
   const floodDangers = floodSensors.filter(sensor => 
     sensor.severity === 'danger' || sensor.water_level >= (sensor.max_threshold ?? 180)
@@ -190,6 +195,15 @@ export default function Dashboard({
             </span>
 
             <button
+              onClick={() => setShowIoTModal(true)}
+              className="px-2.5 py-1.5 rounded-xl border border-cyan-500/40 bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-500 dark:text-cyan-400 text-xs font-bold transition flex items-center gap-1.5 active:scale-95 cursor-pointer shadow-sm"
+              title="Connect IoT hardware or simulate specific area conditions (e.g. Alkapuri flood/traffic)"
+            >
+              <Radio size={13} className="text-cyan-500 animate-pulse" />
+              <span>IoT & Incident</span>
+            </button>
+
+            <button
               onClick={() => handleSimulate('flood')}
               disabled={isSimulating}
               className="px-2.5 py-1.5 rounded-xl border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 text-xs font-bold transition flex items-center gap-1.5 active:scale-95 disabled:opacity-50 cursor-pointer shadow-sm"
@@ -244,6 +258,7 @@ export default function Dashboard({
             theme={theme} 
             isSimplified={isSimplified}
             onSelect={setSelectedPlot}
+            selectedAreaName={focusedAreaName}
           />
 
           {/* Quick Right Panel Toggle (if collapsed) */}
@@ -423,6 +438,16 @@ export default function Dashboard({
           </div>
         )}
       </AnimatePresence>
+
+      {/* IoT Hardware Ingestion & Scenario Simulator Modal */}
+      <IoTIncidentModal
+        isOpen={showIoTModal}
+        onClose={() => setShowIoTModal(false)}
+        onAreaSelected={(area) => {
+          setFocusedAreaName(area);
+        }}
+      />
     </div>
   );
 }
+
