@@ -430,41 +430,46 @@ export default function CityMap({
       {/* 3. BOTTOM-LEFT TELEMETRY & ROUTE LEGEND */}
       <div className="absolute bottom-3 left-3 z-[1000] pointer-events-none hidden md:block">
         <div 
-          className="pointer-events-auto rounded-xl border border-slate-700/80 bg-slate-900/95 text-slate-200 p-2.5 shadow-2xl text-[10px] space-y-1.5 min-w-[185px]"
-          style={{ boxShadow: '0 10px 30px rgba(0,0,0,0.4)' }}
+          className="pointer-events-auto rounded-xl border p-3 shadow-2xl text-[10px] space-y-1.5 min-w-[190px] backdrop-blur-md transition-colors"
+          style={{ 
+            background: 'var(--t-bg-surface)', 
+            borderColor: 'var(--t-border)', 
+            color: 'var(--t-text-primary)',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.25)' 
+          }}
         >
           <div className="font-extrabold uppercase tracking-wider text-[9px] flex items-center justify-between mb-1" style={{ color: 'var(--t-text-muted)' }}>
             <span className="flex items-center gap-1.5">
               <Radio size={10} className="text-cyan-500 animate-pulse" /> Live Telemetry
             </span>
-            <span className="text-[9px] text-emerald-500 font-bold">11 Sectors</span>
+            <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-bold">11 Sectors</span>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-sm" />
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm" />
             <span style={{ color: 'var(--t-text-secondary)' }}>Safe / Operational Flow</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-sm" />
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-sm" />
             <span style={{ color: 'var(--t-text-secondary)' }}>Warning Threshold (&ge;100cm)</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-sm animate-ping" />
-            <span className="font-bold text-rose-500">Critical Surge / Gridlock</span>
+            <span className="font-bold text-rose-600 dark:text-rose-400">Critical Surge / Gridlock</span>
           </div>
 
-          <div className="pt-1.5 border-t border-slate-700/30 flex flex-col gap-1">
+          <div className="pt-1.5 border-t flex flex-col gap-1" style={{ borderColor: 'var(--t-border)' }}>
             <div className="flex items-center gap-2">
               <span className="w-3.5 h-0.5 bg-red-500 border-b border-dashed border-red-500" />
-              <span className="text-rose-400 font-semibold">Blocked Arterial Road</span>
+              <span className="text-red-600 dark:text-red-400 font-semibold">Blocked Corridor</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="w-3.5 h-1 rounded bg-cyan-400" />
-              <span className="text-cyan-400 font-semibold">Recommended Bypass 1</span>
+              <span className="w-3.5 h-1 rounded bg-cyan-500" />
+              <span className="text-cyan-600 dark:text-cyan-400 font-semibold">Recommended Bypass 1</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="w-3.5 h-1 rounded bg-emerald-400" />
-              <span className="text-emerald-400 font-semibold">Alternative Bypass 2</span>
+              <span className="w-3.5 h-1 rounded bg-emerald-500" />
+              <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Alternative Bypass 2</span>
             </div>
           </div>
         </div>
@@ -480,8 +485,13 @@ export default function CityMap({
             className="absolute bottom-3 right-3 z-[1000] pointer-events-none max-w-[360px] w-full"
           >
             <div 
-              className="pointer-events-auto rounded-2xl border border-slate-700 bg-slate-900 text-slate-100 p-3.5 shadow-2xl transition-all"
-              style={{ boxShadow: '0 20px 40px rgba(0,0,0,0.45)' }}
+              className="pointer-events-auto rounded-xl border p-3.5 shadow-2xl transition-all backdrop-blur-md"
+              style={{ 
+                background: 'var(--t-bg-surface)', 
+                borderColor: 'var(--t-border)',
+                color: 'var(--t-text-primary)',
+                boxShadow: '0 20px 40px rgba(0,0,0,0.35)' 
+              }}
             >
               {/* Header */}
               <div className="flex items-center justify-between gap-2 pb-2 mb-2 border-b" style={{ borderColor: 'var(--t-border)' }}>
@@ -495,9 +505,9 @@ export default function CityMap({
                         Smart Route Advisor: {currentAdvisorSector.area.name}
                       </span>
                       {currentAdvisorSector.isDanger ? (
-                        <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black uppercase bg-red-500/20 text-red-500 border border-red-500/30">Hazard</span>
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/30">Hazard</span>
                       ) : (
-                        <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold uppercase bg-emerald-500/20 text-emerald-500 border border-emerald-500/30">Safe</span>
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">Safe</span>
                       )}
                     </div>
                     <div className="text-[10px]" style={{ color: 'var(--t-text-muted)' }}>
@@ -509,13 +519,15 @@ export default function CityMap({
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => setAdvisorMinimized(prev => !prev)}
-                    className="p-1 rounded-lg hover:bg-slate-500/10 text-slate-400 hover:text-slate-200 text-xs font-bold"
+                    className="p-1 rounded-md hover:bg-black/5 dark:hover:bg-white/10 text-xs font-bold transition cursor-pointer"
+                    style={{ color: 'var(--t-text-muted)' }}
                   >
                     {advisorMinimized ? 'Expand' : 'Hide'}
                   </button>
                   <button
                     onClick={() => setActiveAdvisorArea(null)}
-                    className="p-1 rounded-lg hover:bg-slate-500/10 text-slate-400 hover:text-slate-200"
+                    className="p-1 rounded-md hover:bg-black/5 dark:hover:bg-white/10 transition cursor-pointer"
+                    style={{ color: 'var(--t-text-muted)' }}
                   >
                     <X size={14} />
                   </button>
@@ -525,7 +537,7 @@ export default function CityMap({
               {!advisorMinimized && (
                 <div className="space-y-2 text-xs">
                   {/* Status alert box */}
-                  <div className={`p-2 rounded-xl text-[11px] leading-tight ${currentAdvisorSector.isDanger ? 'bg-rose-500/10 border border-rose-500/30 text-rose-400 font-semibold' : 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'}`}>
+                  <div className={`p-2 rounded-lg text-[11px] leading-tight ${currentAdvisorSector.isDanger ? 'bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 font-semibold' : 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400'}`}>
                     {currentAdvisorSector.isDanger ? (
                       <div className="flex items-start gap-1.5">
                         <AlertTriangle size={13} className="shrink-0 mt-0.5 text-rose-500" />
@@ -535,7 +547,7 @@ export default function CityMap({
                       </div>
                     ) : (
                       <div className="flex items-center gap-1.5">
-                        <ShieldCheck size={13} className="text-emerald-500 shrink-0" />
+                        <ShieldCheck size={13} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
                         <span>All roads in {currentAdvisorSector.area.name} are operational. Nominal throughput.</span>
                       </div>
                     )}
@@ -555,20 +567,24 @@ export default function CityMap({
                             setFlyCoord(d.coordinates[0]);
                           }
                         }}
-                        className={`p-2 rounded-xl border transition cursor-pointer hover:border-cyan-400 ${idx === 0 ? 'border-cyan-500/30 bg-cyan-500/5' : 'border-emerald-500/25 bg-emerald-500/5'}`}
+                        className="p-2.5 rounded-lg border transition cursor-pointer hover:border-cyan-400"
+                        style={{
+                          background: 'var(--t-bg-elevated)',
+                          borderColor: 'var(--t-border)',
+                        }}
                       >
                         <div className="flex items-center justify-between text-[11px] font-bold mb-0.5">
-                          <span className={idx === 0 ? 'text-cyan-400' : 'text-emerald-400'}>
+                          <span className={idx === 0 ? 'text-cyan-600 dark:text-cyan-400' : 'text-emerald-600 dark:text-emerald-400'}>
                             {idx === 0 ? '★ ' : '• '} {d.name}
                           </span>
-                          <span className="font-mono text-[10px] text-slate-400">
+                          <span className="font-mono text-[10px]" style={{ color: 'var(--t-text-muted)' }}>
                             {d.timeEstimate} ({d.distanceDelta})
                           </span>
                         </div>
                         <div className="text-[10px] font-medium leading-relaxed" style={{ color: 'var(--t-text-secondary)' }}>
                           {d.via}
                         </div>
-                        <div className="text-[9px] mt-1 font-semibold text-emerald-500">
+                        <div className="text-[9px] mt-1 font-semibold text-emerald-600 dark:text-emerald-400">
                           {d.elevation}
                         </div>
                       </div>
@@ -577,10 +593,10 @@ export default function CityMap({
 
                   {/* Focus Action */}
                   <div className="flex justify-between items-center pt-1 text-[10px]">
-                    <span className="text-slate-400">Click any detour to fly & preview</span>
+                    <span style={{ color: 'var(--t-text-muted)' }}>Click any detour to fly & preview</span>
                     <button
                       onClick={() => setFlyCoord(currentRouteProfile.center)}
-                      className="text-cyan-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
+                      className="text-cyan-600 dark:text-cyan-400 font-bold hover:underline flex items-center gap-1 cursor-pointer"
                     >
                       <span>Focus {currentAdvisorSector.area.name}</span>
                       <ArrowRight size={11} />

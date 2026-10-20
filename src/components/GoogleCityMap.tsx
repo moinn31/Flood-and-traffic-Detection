@@ -351,9 +351,14 @@ export const GoogleCityMap: React.FC<GoogleCityMapProps> = ({
           onClick={() => setTrafficLayerEnabled(!trafficLayerEnabled)}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold shadow-lg transition-all cursor-pointer ${
             trafficLayerEnabled
-              ? 'border-emerald-500/50 bg-emerald-500/20 text-emerald-400'
-              : 'border-slate-700 bg-slate-900/90 text-slate-400 hover:text-white'
+              ? 'border-emerald-500/50 bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+              : 'hover:scale-105'
           }`}
+          style={!trafficLayerEnabled ? {
+            background: 'var(--t-bg-surface)',
+            borderColor: 'var(--t-border)',
+            color: 'var(--t-text-secondary)',
+          } : {}}
         >
           <Layers size={13} />
           <span>Traffic Layer</span>
@@ -364,9 +369,14 @@ export const GoogleCityMap: React.FC<GoogleCityMapProps> = ({
           onClick={() => setMapTypeId(mapTypeId === 'roadmap' ? 'hybrid' : 'roadmap')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold shadow-lg transition-all cursor-pointer ${
             mapTypeId === 'hybrid'
-              ? 'border-cyan-500/50 bg-cyan-500/20 text-cyan-400'
-              : 'border-slate-700 bg-slate-900/90 text-slate-400 hover:text-white'
+              ? 'border-cyan-500/50 bg-cyan-500/20 text-cyan-600 dark:text-cyan-400'
+              : 'hover:scale-105'
           }`}
+          style={mapTypeId !== 'hybrid' ? {
+            background: 'var(--t-bg-surface)',
+            borderColor: 'var(--t-border)',
+            color: 'var(--t-text-secondary)',
+          } : {}}
         >
           <Eye size={13} />
           <span>{mapTypeId === 'hybrid' ? 'Vector' : 'Satellite'}</span>
@@ -381,7 +391,12 @@ export const GoogleCityMap: React.FC<GoogleCityMapProps> = ({
             }
           }}
           title="Recenter on Vadodara"
-          className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-700 bg-slate-900/90 text-slate-300 hover:text-white hover:bg-slate-800 shadow-lg transition cursor-pointer"
+          className="flex h-8 w-8 items-center justify-center rounded-xl border shadow-lg transition cursor-pointer hover:scale-105"
+          style={{
+            background: 'var(--t-bg-surface)',
+            borderColor: 'var(--t-border)',
+            color: 'var(--t-text-primary)',
+          }}
         >
           <Compass size={14} />
         </button>
