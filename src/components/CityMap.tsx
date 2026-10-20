@@ -666,24 +666,74 @@ export default function CityMap({
           );
         })}
 
-        {/* 2. DYNAMIC GOOGLE NAVIGATION ROUTES IN LEAFLET */}
-        {activeRoutes && activeRoutes.map((rt) => (
-          <Polyline
-            key={`dyn-route-${rt.id}`}
-            positions={rt.path}
-            pathOptions={{
-              color: rt.isCompromised ? '#ef4444' : rt.isRecommendedDetour ? '#10b981' : '#06b6d4',
-              weight: rt.id === selectedRouteId ? 6 : 4,
-              dashArray: rt.isCompromised ? '8, 8' : undefined,
-              opacity: 0.9,
-            }}
+        {/* 2. DYNAMIC REAL-ROAD NAVIGATION ROUTES IN LEAFLET */}
+        {activeRoutes && activeRoutes.map((rt) => {
+          const isSelected = rt.id === selectedRouteId;
+          const strokeColor = rt.isCompromised
+            ? '#ef4444' // Solid Red for hazard / blocked corridor
+            : rt.isRecommendedDetour
+            ? '#10b981' // Google Green for safe alternative detour
+            : '#2563eb'; // Google Maps Classic Blue for optimal route
+
+          return (
+            <Polyline
+              key={`dyn-route-${rt.id}`}
+              positions={rt.path}
+              pathOptions={{
+                color: strokeColor,
+                weight: isSelected ? 7 : 5,
+                dashArray: rt.isCompromised ? '6, 6' : undefined,
+                opacity: isSelected ? 0.95 : 0.75,
+              }}
+            >
+              <Tooltip sticky>
+                <div className="font-sans text-xs">
+                  <strong>{rt.name}</strong> ({rt.distanceText} • {rt.durationText})
+                </div>
+              </Tooltip>
+            </Polyline>
+          );
+        })}
+
+        {/* 2b. SOLID RED HAZARD SPOTS (⛔) ON ACTIVE ROUTES */}
+        {activeRoutes && activeRoutes.flatMap((rt) => rt.hazards || []).map((hz, idx) => (
+          <Marker
+            key={`hazard-spot-${hz.id || idx}`}
+            position={hz.location}
+            icon={L.divIcon({
+              className: 'custom-hazard-spot',
+              html: `
+                <div style="position: relative; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;">
+                  <div style="position: absolute; inset: 0; border-radius: 50%; background: #ef4444; opacity: 0.75; animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
+                  <div style="position: relative; width: 28px; height: 28px; border-radius: 50%; background: #ef4444; border: 3px solid #ffffff; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 16px rgba(239, 68, 68, 0.95); font-size: 14px; font-weight: bold; color: white;">
+                    ⛔
+                  </div>
+                </div>
+              `,
+              iconSize: [34, 34],
+              iconAnchor: [17, 17],
+            })}
           >
-            <Tooltip sticky>
-              <div className="font-sans text-xs">
-                <strong>{rt.name}</strong> ({rt.distanceText} • {rt.durationText})
+            <Popup>
+              <div className="p-2 min-w-[210px] text-slate-900 dark:text-slate-100">
+                <div className="flex items-center gap-1.5 pb-1 mb-1 border-b border-red-500/30">
+                  <span className="text-base">⛔</span>
+                  <span className="font-extrabold text-xs text-red-600 dark:text-red-400 uppercase">
+                    {hz.type === 'flood' ? 'SUBMERGED ROADWAY HAZARD' : 'TRAFFIC GRIDLOCK CHOKEPOINT'}
+                  </span>
+                </div>
+                <div className="text-xs font-bold mb-1 text-slate-900 dark:text-white">
+                  {hz.headline}
+                </div>
+                <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug mb-2">
+                  {hz.description}
+                </p>
+                <div className="rounded bg-emerald-500/10 border border-emerald-500/30 px-2 py-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                  🛡️ Alternative Safe Detour Active (Green Route)
+                </div>
               </div>
-            </Tooltip>
-          </Polyline>
+            </Popup>
+          </Marker>
         ))}
 
         {/* 2. REROUTING & HAZARD POLYLINES */}

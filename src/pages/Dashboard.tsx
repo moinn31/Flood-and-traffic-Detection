@@ -341,17 +341,17 @@ export default function Dashboard({
               initial={{ opacity: 0, scale: 0.96, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: 10 }}
-              className="w-full max-w-2xl rounded-3xl border shadow-2xl overflow-hidden flex flex-col max-h-[88vh]"
+              className="w-full max-w-2xl rounded-xl border shadow-2xl overflow-hidden flex flex-col max-h-[88vh]"
               style={{ background: 'var(--t-bg-surface)', borderColor: 'var(--t-border)' }}
             >
               {/* Header */}
               <div 
-                className="p-5 border-b flex items-center justify-between"
+                className="p-4 border-b flex items-center justify-between"
                 style={{ borderColor: 'var(--t-border)', background: 'var(--t-bg-elevated)' }}
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-md">
-                    <ShieldAlert size={20} />
+                  <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-md">
+                    <ShieldAlert size={19} />
                   </div>
                   <div>
                     <h2 className="text-sm font-extrabold uppercase tracking-wide" style={{ color: 'var(--t-text-primary)' }}>
@@ -365,7 +365,7 @@ export default function Dashboard({
 
                 <button 
                   onClick={() => setShowReportModal(false)}
-                  className="p-2 rounded-xl hover:bg-black/5 transition"
+                  className="p-1.5 rounded-lg hover:bg-black/5 transition cursor-pointer"
                   style={{ color: 'var(--t-text-muted)' }}
                 >
                   <X size={18} />
@@ -373,25 +373,26 @@ export default function Dashboard({
               </div>
 
               {/* Printable Body */}
-              <div className="p-5 overflow-y-auto space-y-4 text-xs">
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                  <div className="p-3 rounded-xl border" style={{ background: 'var(--t-bg-elevated)', borderColor: 'var(--t-border)' }}>
-                    <span className="text-[10px] uppercase font-bold block" style={{ color: 'var(--t-text-muted)' }}>Threat Level</span>
-                    <span className={`text-sm font-extrabold ${isCritical ? 'text-rose-500' : 'text-emerald-500'}`}>
+              <div className="p-4 overflow-y-auto space-y-4 text-xs">
+                {/* 4 Crisp Square / Rectangular KPI Metric Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="p-3.5 rounded-lg border flex flex-col justify-between" style={{ background: 'var(--t-bg-elevated)', borderColor: 'var(--t-border)' }}>
+                    <span className="text-[10px] uppercase font-bold tracking-wider block mb-1 text-slate-500 dark:text-slate-400">Threat Level</span>
+                    <span className={`text-base font-extrabold leading-tight ${isCritical ? 'text-rose-500' : 'text-emerald-500'}`}>
                       {threatLabel.split(' ')[0]}
                     </span>
                   </div>
-                  <div className="p-3 rounded-xl border" style={{ background: 'var(--t-bg-elevated)', borderColor: 'var(--t-border)' }}>
-                    <span className="text-[10px] uppercase font-bold block" style={{ color: 'var(--t-text-muted)' }}>Monitored Corridors</span>
-                    <span className="text-sm font-extrabold" style={{ color: 'var(--t-text-primary)' }}>11 Sectors</span>
+                  <div className="p-3.5 rounded-lg border flex flex-col justify-between" style={{ background: 'var(--t-bg-elevated)', borderColor: 'var(--t-border)' }}>
+                    <span className="text-[10px] uppercase font-bold tracking-wider block mb-1 text-slate-500 dark:text-slate-400">Monitored Zones</span>
+                    <span className="text-base font-extrabold leading-tight" style={{ color: 'var(--t-text-primary)' }}>11 Sectors</span>
                   </div>
-                  <div className="p-3 rounded-xl border" style={{ background: 'var(--t-bg-elevated)', borderColor: 'var(--t-border)' }}>
-                    <span className="text-[10px] uppercase font-bold block" style={{ color: 'var(--t-text-muted)' }}>Peak Water Depth</span>
-                    <span className="text-sm font-extrabold text-cyan-500">{maxWaterLevel.toFixed(1)} cm</span>
+                  <div className="p-3.5 rounded-lg border flex flex-col justify-between" style={{ background: 'var(--t-bg-elevated)', borderColor: 'var(--t-border)' }}>
+                    <span className="text-[10px] uppercase font-bold tracking-wider block mb-1 text-slate-500 dark:text-slate-400">Peak Water</span>
+                    <span className="text-base font-extrabold leading-tight text-cyan-500">{maxWaterLevel.toFixed(1)} cm</span>
                   </div>
-                  <div className="p-3 rounded-xl border" style={{ background: 'var(--t-bg-elevated)', borderColor: 'var(--t-border)' }}>
-                    <span className="text-[10px] uppercase font-bold block" style={{ color: 'var(--t-text-muted)' }}>Active Alerts</span>
-                    <span className="text-sm font-extrabold text-amber-500">{unreadAlerts} Incidents</span>
+                  <div className="p-3.5 rounded-lg border flex flex-col justify-between" style={{ background: 'var(--t-bg-elevated)', borderColor: 'var(--t-border)' }}>
+                    <span className="text-[10px] uppercase font-bold tracking-wider block mb-1 text-slate-500 dark:text-slate-400">Active Alerts</span>
+                    <span className="text-base font-extrabold leading-tight text-amber-500">{unreadAlerts} Incidents</span>
                   </div>
                 </div>
 

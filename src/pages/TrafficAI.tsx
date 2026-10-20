@@ -109,6 +109,15 @@ export default function TrafficAI({ trafficData, alerts }: TrafficPageProps) {
   const [liveCounts, setLiveCounts] = useState<{ cars: number; bikes: number; trucks: number; buses: number; total: number }>({ cars: 0, bikes: 0, trucks: 0, buses: 0, total: 0 });
   const [trafficHistory, setTrafficHistory] = useState<TrafficHistoryPoint[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [localOverrides, setLocalOverrides] = useState<Record<string, {
+    vehicle_count: number;
+    cars: number;
+    bikes: number;
+    trucks: number;
+    buses: number;
+    traffic_percentage: number;
+    traffic_level: 'low' | 'medium' | 'heavy';
+  }>>({});
 
   // Upload & Detection State
   const [uploading, setUploading] = useState(false);
@@ -204,18 +213,19 @@ export default function TrafficAI({ trafficData, alerts }: TrafficPageProps) {
   // MERGE LIVE TRAFFIC DATA FROM DATABASE WITH HISTORY
   // This guarantees all 11 areas have real baseline vehicle counts instead of showing "0 vehicles"
   const latestAreaSnapshots: TrafficAreaSnapshot[] = VADODARA_AREAS.map((area) => {
+    const override = localOverrides[area.name.toLowerCase()];
     const live = trafficData.find(t => t.area_name.toLowerCase() === area.name.toLowerCase());
     const points = areaHistoryPoints(area.name);
     const latest = points[points.length - 1];
     const previous = points[points.length - 2];
 
-    const vehicleCount = live?.vehicle_count ?? latest?.vehicle_count ?? (live ? (live.cars + live.bikes + live.trucks + live.buses) : 28);
-    const cars = live?.cars ?? (latest ? Math.round(vehicleCount * 0.52) : Math.round(vehicleCount * 0.52));
-    const bikes = live?.bikes ?? (latest ? Math.round(vehicleCount * 0.26) : Math.round(vehicleCount * 0.26));
-    const trucks = live?.trucks ?? (latest ? Math.round(vehicleCount * 0.14) : Math.round(vehicleCount * 0.14));
-    const buses = live?.buses ?? Math.max(0, vehicleCount - cars - bikes - trucks);
-    const trafficLevel = live?.traffic_level ?? latest?.traffic_level ?? (vehicleCount > 70 ? 'heavy' : vehicleCount > 35 ? 'medium' : 'low');
-    const trafficPercentage = live?.traffic_percentage ?? latest?.traffic_percentage ?? Math.min(100, Math.round((vehicleCount / 100) * 100));
+    const vehicleCount = override?.vehicle_count ?? live?.vehicle_count ?? latest?.vehicle_count ?? (live ? (live.cars + live.bikes + live.trucks + live.buses) : 28);
+    const cars = override?.cars ?? live?.cars ?? (latest ? Math.round(vehicleCount * 0.52) : Math.round(vehicleCount * 0.52));
+    const bikes = override?.bikes ?? live?.bikes ?? (latest ? Math.round(vehicleCount * 0.26) : Math.round(vehicleCount * 0.26));
+    const trucks = override?.trucks ?? live?.trucks ?? (latest ? Math.round(vehicleCount * 0.14) : Math.round(vehicleCount * 0.14));
+    const buses = override?.buses ?? live?.buses ?? Math.max(0, vehicleCount - cars - bikes - trucks);
+    const trafficLevel = override?.traffic_level ?? live?.traffic_level ?? latest?.traffic_level ?? (vehicleCount > 70 ? 'heavy' : vehicleCount > 35 ? 'medium' : 'low');
+    const trafficPercentage = override?.traffic_percentage ?? live?.traffic_percentage ?? Math.min(100, Math.round((vehicleCount / 100) * 100));
     const trendDelta = previous ? (vehicleCount - previous.vehicle_count) : 0;
     const recordedAt = live?.last_updated ?? latest?.recorded_at ?? new Date().toISOString();
 
@@ -289,6 +299,35 @@ export default function TrafficAI({ trafficData, alerts }: TrafficPageProps) {
       setDetectionResult(result);
       setUploadProgress(100);
       setShowUploadModal(false);
+
+      // Immediately apply to sector card, charts and telemetry
+      const targetArea = (result.area || selectedArea).trim();
+      setSelectedArea(targetArea);
+      setLocalOverrides(prev => ({
+        ...prev,
+        [targetArea.toLowerCase()]: {
+          vehicle_count: result.total_vehicles,
+          cars: result.cars,
+          bikes: result.bikes,
+          trucks: result.trucks,
+          buses: result.buses,
+          traffic_percentage: result.traffic_percentage,
+          traffic_level: result.traffic_level as 'low' | 'medium' | 'heavy',
+        }
+      }));
+
+      // Immediately trigger history fetch
+      fetch(`${apiBase}/traffic-history?hours=24&limit=500`)
+        .then(res => res.json())
+        .then(rows => {
+          if (Array.isArray(rows)) {
+            setTrafficHistory(rows.map((row: any) => ({
+              ...row,
+              time: new Date(row.recorded_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false }),
+            })));
+          }
+        })
+        .catch(() => {});
 
       addToast({
         type: 'info',

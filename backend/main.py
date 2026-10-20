@@ -726,6 +726,25 @@ async def detect_traffic_media(
 
         elapsed_ms = round((time.time() - start_time) * 1000, 1)
 
+        # Persist detected traffic directly to SQLite database and broadcast to all connected UI clients
+        target_area = area or "Alkapuri"
+        try:
+            db_res = db_manager.override_area_condition(
+                area_name=target_area,
+                cars=counts["car"],
+                bikes=counts["bike"],
+                trucks=counts["truck"],
+                buses=counts["bus"],
+                vehicle_count=total_vehicles,
+                traffic_percentage=traffic_pct,
+            )
+            if db_res.get("traffic"):
+                await manager.broadcast({"type": "traffic_update", "data": db_res["traffic"]})
+            for alert in db_res.get("alerts", []):
+                await manager.broadcast({"type": "alert", "data": alert})
+        except Exception as db_err:
+            print(f"Warning: Failed to persist traffic detection: {db_err}")
+
         return {
             "media_type": "image",
             "filename": file.filename,
@@ -834,6 +853,25 @@ async def detect_traffic_media(
                     b64_img = f"data:image/jpeg;base64,{base64.b64encode(buf.tobytes()).decode('utf-8')}"
 
             elapsed_ms = round((time.time() - start_time) * 1000, 1)
+
+            # Persist detected video traffic directly to SQLite database and broadcast to all connected UI clients
+            target_area = area or "Alkapuri"
+            try:
+                db_res = db_manager.override_area_condition(
+                    area_name=target_area,
+                    cars=avg_cars,
+                    bikes=avg_bikes,
+                    trucks=avg_trucks,
+                    buses=avg_buses,
+                    vehicle_count=avg_vehicles,
+                    traffic_percentage=traffic_pct,
+                )
+                if db_res.get("traffic"):
+                    await manager.broadcast({"type": "traffic_update", "data": db_res["traffic"]})
+                for alert in db_res.get("alerts", []):
+                    await manager.broadcast({"type": "alert", "data": alert})
+            except Exception as db_err:
+                print(f"Warning: Failed to persist video traffic detection: {db_err}")
 
             return {
                 "media_type": "video",
