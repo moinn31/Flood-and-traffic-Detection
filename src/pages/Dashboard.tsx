@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { FloodSensor, TrafficData, Alert, YoloRuntimeStatus } from '../types';
+import { FloodSensor, TrafficData, Alert, YoloRuntimeStatus, NavRouteOption } from '../types';
+import { GoogleRoutePlanner } from '../components/GoogleRoutePlanner';
 import CityMap from '../components/CityMap';
 import RightPanel from '../components/RightPanel';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -47,6 +48,9 @@ export default function Dashboard({
   const [showReportModal, setShowReportModal] = useState(false);
   const [showIoTModal, setShowIoTModal] = useState(false);
   const [focusedAreaName, setFocusedAreaName] = useState<string>('Alkapuri');
+  const [activeNavRoutes, setActiveNavRoutes] = useState<NavRouteOption[]>([]);
+  const [selectedNavRouteId, setSelectedNavRouteId] = useState<string | null>(null);
+  const [showRoutePlanner, setShowRoutePlanner] = useState<boolean>(false);
   const { addToast } = useToast();
 
 
@@ -195,6 +199,18 @@ export default function Dashboard({
             </span>
 
             <button
+              onClick={() => setShowRoutePlanner((prev) => !prev)}
+              className="px-2.5 py-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-600 dark:text-emerald-400 text-xs font-bold transition flex items-center gap-1.5 active:scale-95 cursor-pointer shadow-sm"
+              title="Open Google Maps Smart Route Planner with automatic flood/traffic rerouting"
+            >
+              <Route size={13} className="text-emerald-500" />
+              <span>Route Planner</span>
+              {activeNavRoutes.some(r => r.isCompromised) && (
+                <span className="flex h-1.5 w-1.5 rounded-full bg-red-500 animate-ping" />
+              )}
+            </button>
+
+            <button
               onClick={() => setShowIoTModal(true)}
               className="px-2.5 py-1.5 rounded-xl border border-cyan-500/40 bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-500 dark:text-cyan-400 text-xs font-bold transition flex items-center gap-1.5 active:scale-95 cursor-pointer shadow-sm"
               title="Connect IoT hardware or simulate specific area conditions (e.g. Alkapuri flood/traffic)"
@@ -255,11 +271,30 @@ export default function Dashboard({
           <CityMap 
             floodSensors={floodSensors} 
             trafficData={trafficData} 
+            alerts={alerts}
             theme={theme} 
             isSimplified={isSimplified}
             onSelect={setSelectedPlot}
             selectedAreaName={focusedAreaName}
+            activeRoutes={activeNavRoutes}
+            selectedRouteId={selectedNavRouteId}
           />
+
+          {/* Floating Google Maps Route Planner */}
+          <div className="absolute top-16 left-4 z-[1001] max-w-sm pointer-events-auto">
+            <GoogleRoutePlanner
+              floodSensors={floodSensors}
+              trafficData={trafficData}
+              isOpen={showRoutePlanner}
+              onToggleOpen={() => setShowRoutePlanner((prev) => !prev)}
+              onRoutesCalculated={(routes, selectedId) => {
+                setActiveNavRoutes(routes);
+                setSelectedNavRouteId(selectedId);
+              }}
+              selectedRouteId={selectedNavRouteId}
+              onSelectRoute={(id) => setSelectedNavRouteId(id)}
+            />
+          </div>
 
           {/* Quick Right Panel Toggle (if collapsed) */}
           {!rightPanelOpen && onToggleRightPanel && (

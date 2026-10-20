@@ -5,10 +5,22 @@ Run with the same environment as the backend so SUPABASE_URL and SUPABASE_KEY
 are picked up from environment variables. The script will update records in-place.
 """
 import os
+from pathlib import Path
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+except Exception:
+    pass
+
 from supabase import create_client
 
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://asczdgonhfaasskhwifc.supabase.co")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzY3pkZ29uaGZhYXNza2h3aWZjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3NzIwNDgsImV4cCI6MjA5NDM0ODA0OH0.JIFnECFks2QuxbDX-iIYt6R8m7mA7QROZSZTRXfOVlA")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_KEY = (
+    os.getenv("SUPABASE_KEY")
+    or os.getenv("SUPABASE_PUBLISHABLE_KEY")
+    or os.getenv("SUPABASE_SECRET_KEY")
+    or ""
+)
 
 def compute_severity(water_level: float, warn: float, max_thr: float) -> str:
     if water_level >= max_thr:
@@ -19,6 +31,10 @@ def compute_severity(water_level: float, warn: float, max_thr: float) -> str:
 
 
 def main():
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        print("[Error] SUPABASE_URL and SUPABASE_KEY must be defined in your .env file.")
+        return
+
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
     print("Fetching flood_data records...")

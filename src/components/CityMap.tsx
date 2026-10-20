@@ -11,17 +11,23 @@ import {
   Car, Droplets, Layers, Navigation, Radio, AlertTriangle, 
   CheckCircle2, Compass, ArrowRight, Route, Eye, EyeOff, ShieldCheck, X
 } from 'lucide-react';
-import { FloodSensor, TrafficData } from '../types';
+import { FloodSensor, TrafficData, Alert, NavRouteOption } from '../types';
+import { GoogleCityMap } from './GoogleCityMap';
 import { VADODARA_CENTER, MAP_ZOOM, VADODARA_AREAS } from '../data';
 import { VADODARA_ROUTE_PROFILES, getRouteAdviceForArea } from '../routingData';
 
 interface CityMapProps {
   floodSensors: FloodSensor[];
   trafficData: TrafficData[];
+  alerts?: Alert[];
   theme: 'light' | 'dark';
   isSimplified: boolean;
   onSelect?: (item: { type: 'flood' | 'traffic', data: any }) => void;
   selectedAreaName?: string;
+  activeRoutes?: NavRouteOption[];
+  selectedRouteId?: string | null;
+  mapEngine?: 'leaflet' | 'google';
+  onMapEngineChange?: (engine: 'leaflet' | 'google') => void;
 }
 
 interface SpreadPoint<T> {
@@ -174,11 +180,21 @@ function spreadTrafficData(items: TrafficData[]): SpreadPoint<TrafficData>[] {
 export default function CityMap({ 
   floodSensors, 
   trafficData, 
+  alerts = [],
   theme, 
   isSimplified, 
   onSelect,
-  selectedAreaName
+  selectedAreaName,
+  activeRoutes = [],
+  selectedRouteId,
+  mapEngine = 'google',
+  onMapEngineChange,
 }: CityMapProps) {
+  const [internalEngine, setInternalEngine] = useState<'leaflet' | 'google'>(mapEngine);
+
+  useEffect(() => {
+    if (mapEngine) setInternalEngine(mapEngine);
+  }, [mapEngine]);
   const satelliteUrl = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
   const labelUrl = "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}";
   
@@ -377,6 +393,24 @@ export default function CityMap({
         </div>
 
         <button
+          onClick={() => {
+            const next = internalEngine === 'google' ? 'leaflet' : 'google';
+            setInternalEngine(next);
+            if (onMapEngineChange) onMapEngineChange(next);
+          }}
+          className="pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 rounded-xl border shadow-lg backdrop-blur-xl text-[11px] font-bold transition hover:scale-105 cursor-pointer"
+          style={{ 
+            background: internalEngine === 'google' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(6, 182, 212, 0.2)', 
+            borderColor: internalEngine === 'google' ? 'rgba(16, 185, 129, 0.5)' : 'rgba(6, 182, 212, 0.5)', 
+            color: internalEngine === 'google' ? '#10b981' : '#06b6d4' 
+          }}
+          title="Switch Map Engine: Google Maps ⇄ Leaflet OpenStreetMap"
+        >
+          <Navigation size={13} className={internalEngine === 'google' ? 'text-emerald-400' : 'text-cyan-400'} />
+          <span>{internalEngine === 'google' ? 'Google Maps' : 'Leaflet GIS'}</span>
+        </button>
+
+        <button
           onClick={() => setShowAreaBadges(prev => !prev)}
           className="pointer-events-auto flex items-center gap-1 px-2.5 py-1.5 rounded-xl border shadow-lg backdrop-blur-xl text-[11px] font-bold transition hover:scale-105 cursor-pointer"
           style={{ 
@@ -557,7 +591,22 @@ export default function CityMap({
         )}
       </AnimatePresence>
 
-      {/* MAP VIEWPORT */}
+      {/* MAP VIEWPORT: GOOGLE MAPS OR LEAFLET */}
+      {internalEngine === 'google' ? (
+        <GoogleCityMap
+          floodSensors={floodSensors}
+          trafficData={trafficData}
+          alerts={alerts}
+          selectedAreaName={activeAdvisorArea || selectedAreaName}
+          onSelectArea={(area) => {
+            setActiveAdvisorArea(area);
+            setSelectedHotspot(area);
+          }}
+          activeRoutes={activeRoutes}
+          selectedRouteId={selectedRouteId}
+          darkMode={theme === 'dark'}
+        />
+      ) : (
       <MapContainer
         center={[VADODARA_CENTER.lat, VADODARA_CENTER.lng]}
         zoom={MAP_ZOOM}
@@ -614,6 +663,26 @@ export default function CityMap({
             </Marker>
           );
         })}
+
+        {/* 2. DYNAMIC GOOGLE NAVIGATION ROUTES IN LEAFLET */}
+        {activeRoutes && activeRoutes.map((rt) => (
+          <Polyline
+            key={`dyn-route-${rt.id}`}
+            positions={rt.path}
+            pathOptions={{
+              color: rt.isCompromised ? '#ef4444' : rt.isRecommendedDetour ? '#10b981' : '#06b6d4',
+              weight: rt.id === selectedRouteId ? 6 : 4,
+              dashArray: rt.isCompromised ? '8, 8' : undefined,
+              opacity: 0.9,
+            }}
+          >
+            <Tooltip sticky>
+              <div className="font-sans text-xs">
+                <strong>{rt.name}</strong> ({rt.distanceText} • {rt.durationText})
+              </div>
+            </Tooltip>
+          </Polyline>
+        ))}
 
         {/* 2. REROUTING & HAZARD POLYLINES */}
         {showRoutesLayer && Object.entries(VADODARA_ROUTE_PROFILES).map(([areaName, profile]) => {
@@ -780,6 +849,7 @@ export default function CityMap({
           );
         })}
       </MapContainer>
+      )}
     </motion.div>
   );
 }

@@ -26,19 +26,33 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from supabase import create_client, Client
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv(ROOT_DIR / ".env")
+except Exception:
+    pass
+
 from database import db_manager
 
 # Ensure local SQLite database and tables are pre-seeded and ready
 db_manager.init_db()
 
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://asczdgonhfaasskhwifc.supabase.co")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzY3pkZ29uaGZhYXNza2h3aWZjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3NzIwNDgsImV4cCI6MjA5NDM0ODA0OH0.JIFnECFks2QuxbDX-iIYt6R8m7mA7QROZSZTRXfOVlA")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_KEY = (
+    os.getenv("SUPABASE_KEY")
+    or os.getenv("SUPABASE_PUBLISHABLE_KEY")
+    or os.getenv("SUPABASE_SECRET_KEY")
+    or ""
+)
 
 supabase_client: Optional[Client] = None
-try:
-    supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
-except Exception as e:
-    print(f"[Supabase] Optional client warning: {e}")
+if SUPABASE_URL and SUPABASE_KEY:
+    try:
+        supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    except Exception as e:
+        print(f"[Supabase] Optional client warning: {e}")
+else:
+    print("[Supabase] Cloud sync not configured (SUPABASE_URL/KEY not found in .env). Operating with local SQLite database.")
 
 # ============================================
 # DATA MODELS

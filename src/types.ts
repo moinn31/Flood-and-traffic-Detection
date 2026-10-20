@@ -100,3 +100,54 @@ export interface DetourRoute {
 }
 
 
+
+export interface NavigationHazard {
+  id: string;
+  type: 'flood' | 'traffic';
+  areaName: string;
+  severity: 'warning' | 'danger';
+  headline: string;
+  description: string;
+  waterLevel?: number;
+  trafficPercentage?: number;
+  location: [number, number];
+  distanceToRouteMeters: number;
+}
+
+export interface NavStep {
+  instructions: string;
+  distance: string;
+  duration: string;
+  maneuver?: string;
+  location?: [number, number];
+}
+
+export interface NavRouteOption {
+  id: string;
+  name: string;
+  summary: string;
+  via: string;
+  isCompromised: boolean;
+  isRecommendedDetour: boolean;
+  distanceMeters: number;
+  distanceText: string;
+  durationSeconds: number;
+  durationText: string;
+  hazards: NavigationHazard[];
+  path: [number, number][]; // [lat, lng] array
+  steps: NavStep[];
+  elevationTag?: string;
+}
+
+export interface RoutePlanningState {
+  origin: string;
+  destination: string;
+  originCoords?: [number, number];
+  destCoords?: [number, number];
+  travelMode: 'DRIVING' | 'TRANSIT' | 'BICYCLING' | 'WALKING';
+  routes: NavRouteOption[];
+  selectedRouteId: string | null;
+  activeHazards: NavigationHazard[];
+  loading: boolean;
+  error?: string | null;
+}

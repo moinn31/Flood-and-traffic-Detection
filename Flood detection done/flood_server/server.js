@@ -9,17 +9,22 @@ app.use(cors());
 app.use(express.json());
 
 // ================= SUPABASE =================
+const path = require("path");
+try {
+  require("dotenv").config({ path: path.resolve(__dirname, "../../.env") });
+} catch (e) {}
 
-const supabaseUrl =
-"https://asczdgonhfaasskhwifc.supabase.co";
+const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseKey = process.env.SUPABASE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || "";
 
-const supabaseKey =
-"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzY3pkZ29uaGZhYXNza2h3aWZjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3NzIwNDgsImV4cCI6MjA5NDM0ODA0OH0.JIFnECFks2QuxbDX-iIYt6R8m7mA7QROZSZTRXfOVlA";
-
-const supabase = createClient(
-  supabaseUrl,
-  supabaseKey
-);
+let supabase = null;
+if (supabaseUrl && supabaseKey) {
+  try {
+    supabase = createClient(supabaseUrl, supabaseKey);
+  } catch (err) {
+    console.warn("[Supabase] Init error:", err.message);
+  }
+}
 
 // ================= TEST ROUTE =================
 
