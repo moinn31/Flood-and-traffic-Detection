@@ -310,7 +310,8 @@ export default function CityMap({
       transition={{ duration: 0.4 }}
       className="w-full h-full relative overflow-hidden"
     >
-      {/* 1. TOP CENTER FLOATING LAYER SELECTOR */}
+      {/* 1. TOP CENTER FLOATING LAYER SELECTOR (Leaflet mode only) */}
+      {internalEngine === 'leaflet' && (
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] pointer-events-none">
         <div className="pointer-events-auto flex items-center gap-1 rounded-full p-1 border shadow-xl backdrop-blur-xl"
           style={{ background: 'var(--t-bg-glass)', borderColor: 'var(--t-border)' }}
@@ -368,6 +369,7 @@ export default function CityMap({
           </button>
         </div>
       </div>
+      )}
 
       {/* 2. TOP-LEFT CONTROLS: SECTOR JUMP & AREA BADGE TOGGLE */}
       <div className="absolute top-3 left-3 z-[1000] pointer-events-none flex items-center gap-2">
@@ -428,8 +430,8 @@ export default function CityMap({
       {/* 3. BOTTOM-LEFT TELEMETRY & ROUTE LEGEND */}
       <div className="absolute bottom-3 left-3 z-[1000] pointer-events-none hidden md:block">
         <div 
-          className="pointer-events-auto rounded-xl border p-2.5 shadow-lg backdrop-blur-xl text-[10px] space-y-1.5 min-w-[175px]"
-          style={{ background: 'var(--t-bg-glass)', borderColor: 'var(--t-border)' }}
+          className="pointer-events-auto rounded-xl border border-slate-700/80 bg-slate-900/95 text-slate-200 p-2.5 shadow-2xl text-[10px] space-y-1.5 min-w-[185px]"
+          style={{ boxShadow: '0 10px 30px rgba(0,0,0,0.4)' }}
         >
           <div className="font-extrabold uppercase tracking-wider text-[9px] flex items-center justify-between mb-1" style={{ color: 'var(--t-text-muted)' }}>
             <span className="flex items-center gap-1.5">
@@ -468,9 +470,9 @@ export default function CityMap({
         </div>
       </div>
 
-      {/* 4. FLOATING SMART DETOUR ADVISOR (COLLAPSIBLE) */}
+      {/* 4. FLOATING SMART DETOUR ADVISOR (Only shown on hazard or explicit inspection) */}
       <AnimatePresence>
-        {activeAdvisorArea && currentRouteProfile && (
+        {activeAdvisorArea && currentRouteProfile && (currentAdvisorSector.isDanger || currentAdvisorSector.isWarn) && (
           <motion.div
             initial={{ opacity: 0, x: 20, y: 10 }}
             animate={{ opacity: 1, x: 0, y: 0 }}
@@ -478,8 +480,8 @@ export default function CityMap({
             className="absolute bottom-3 right-3 z-[1000] pointer-events-none max-w-[360px] w-full"
           >
             <div 
-              className="pointer-events-auto rounded-2xl border p-3.5 shadow-2xl backdrop-blur-xl transition-all"
-              style={{ background: 'var(--t-bg-surface)', borderColor: 'var(--t-border)' }}
+              className="pointer-events-auto rounded-2xl border border-slate-700 bg-slate-900 text-slate-100 p-3.5 shadow-2xl transition-all"
+              style={{ boxShadow: '0 20px 40px rgba(0,0,0,0.45)' }}
             >
               {/* Header */}
               <div className="flex items-center justify-between gap-2 pb-2 mb-2 border-b" style={{ borderColor: 'var(--t-border)' }}>

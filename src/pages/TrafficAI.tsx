@@ -502,7 +502,7 @@ export default function TrafficAI({ trafficData, alerts }: TrafficPageProps) {
                 )}
                 <div className="absolute top-2 left-2 flex items-center gap-1.5 rounded-lg bg-black/70 px-2.5 py-1 text-[11px] font-mono text-cyan-300">
                   <Cpu size={12} />
-                  <span>YOLOv8 Edge Neural Detection</span>
+                  <span>Real-Time Edge Neural Detection</span>
                 </div>
               </div>
 

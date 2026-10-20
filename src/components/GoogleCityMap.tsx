@@ -1,13 +1,13 @@
 /* ============================================
    GOOGLE MAPS GIS CITY COMPONENT
    Native Google Maps Canvas with live sensors, traffic overlay,
-   hazard corridors & dynamic detour navigation polylines
+   prominent RED HAZARD SPOTS on routes, and safe alternative detours
    ============================================ */
 
 import React, { useEffect, useRef, useState } from 'react';
 import { FloodSensor, TrafficData, Alert, NavRouteOption } from '../types';
 import { loadGoogleMaps } from '../services/googleMapsLoader';
-import { Layers, Eye, RefreshCw, Compass } from 'lucide-react';
+import { Layers, Eye, Compass } from 'lucide-react';
 
 interface GoogleCityMapProps {
   floodSensors: FloodSensor[];
@@ -24,7 +24,7 @@ interface GoogleCityMapProps {
 const DARK_MAP_STYLE: google.maps.MapTypeStyle[] = [
   { elementType: 'geometry', stylers: [{ color: '#1a1f2c' }] },
   { elementType: 'labels.text.stroke', stylers: [{ color: '#1a1f2c' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#746855' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#94a3b8' }] },
   {
     featureType: 'administrative.locality',
     elementType: 'labels.text.fill',
@@ -86,6 +86,7 @@ export const GoogleCityMap: React.FC<GoogleCityMapProps> = ({
   const mapInstanceRef = useRef<google.maps.Map | null>(null);
   const trafficLayerRef = useRef<google.maps.TrafficLayer | null>(null);
   const markersRef = useRef<google.maps.Marker[]>([]);
+  const hazardSpotsRef = useRef<google.maps.Marker[]>([]);
   const polylinesRef = useRef<google.maps.Polyline[]>([]);
 
   const [mapLoaded, setMapLoaded] = useState(false);
@@ -176,12 +177,11 @@ export const GoogleCityMap: React.FC<GoogleCityMapProps> = ({
         ? '#f59e0b' // Amber
         : '#10b981'; // Green
 
-      // Create Custom SVG Pin
       const svgIcon = {
         path: window.google.maps.SymbolPath.CIRCLE,
         fillColor: markerColor,
         fillOpacity: 0.9,
-        scale: isDanger ? 10 : 8,
+        scale: isDanger ? 9 : 7,
         strokeColor: '#ffffff',
         strokeWeight: 2,
       };
@@ -193,7 +193,6 @@ export const GoogleCityMap: React.FC<GoogleCityMapProps> = ({
         icon: svgIcon,
       });
 
-      // Info Window on click
       const contentString = `
         <div style="font-family: sans-serif; padding: 6px; color: #0f172a; max-width: 220px;">
           <h4 style="margin: 0 0 4px 0; font-size: 13px; font-weight: bold;">
@@ -225,13 +224,16 @@ export const GoogleCityMap: React.FC<GoogleCityMapProps> = ({
     });
   }, [mapLoaded, floodSensors, trafficData, onSelectArea]);
 
-  // 6. Render Active Routes & Safe Detour Polylines
+  // 6. Render Active Routes, Red Hazard Spots & Safe Detour Polylines
   useEffect(() => {
     if (!mapLoaded || !mapInstanceRef.current || !window.google?.maps) return;
 
-    // Clear old polylines
+    // Clear old polylines & hazard markers
     polylinesRef.current.forEach((p) => p.setMap(null));
     polylinesRef.current = [];
+
+    hazardSpotsRef.current.forEach((h) => h.setMap(null));
+    hazardSpotsRef.current = [];
 
     const map = mapInstanceRef.current;
     if (activeRoutes.length === 0) return;
@@ -243,18 +245,70 @@ export const GoogleCityMap: React.FC<GoogleCityMapProps> = ({
       const isCompromised = route.isCompromised;
 
       // Color and line style
-      let strokeColor = '#06b6d4'; // default cyan
-      let strokeOpacity = 0.8;
-      let strokeWeight = 5;
+      let strokeColor = '#4285F4'; // Classic Google Maps Blue
+      let strokeOpacity = 0.85;
+      let strokeWeight = 6;
       let zIndex = 2;
 
       if (isCompromised) {
-        strokeColor = '#ef4444'; // Red for hazard / blocked
-        strokeOpacity = 0.9;
-        strokeWeight = isSelected ? 6 : 4;
+        strokeColor = '#ef4444'; // Solid Red for blocked corridor
+        strokeOpacity = 0.95;
+        strokeWeight = isSelected ? 7 : 5;
         zIndex = isSelected ? 4 : 2;
+
+        // Render PROMINENT RED HAZARD SPOT on the route
+        if (route.hazards && route.hazards.length > 0) {
+          route.hazards.forEach((hz) => {
+            const hazardSpotIcon = {
+              path: window.google.maps.SymbolPath.CIRCLE,
+              fillColor: '#ef4444',
+              fillOpacity: 1.0,
+              scale: 14,
+              strokeColor: '#ffffff',
+              strokeWeight: 3.5,
+            };
+
+            const spotMarker = new window.google.maps.Marker({
+              position: { lat: hz.location[0], lng: hz.location[1] },
+              map: map,
+              title: `⛔ HAZARD SPOT: ${hz.headline}`,
+              icon: hazardSpotIcon,
+              zIndex: 1000,
+            });
+
+            const spotContent = `
+              <div style="font-family: sans-serif; padding: 6px; color: #0f172a; max-width: 250px;">
+                <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 4px;">
+                  <span style="font-size: 16px;">⛔</span>
+                  <span style="color: #ef4444; font-weight: 800; font-size: 12px; text-transform: uppercase;">
+                    ${hz.type === 'flood' ? 'SUBMERGED ROADWAY HAZARD' : 'TRAFFIC GRIDLOCK CHOKEPOINT'}
+                  </span>
+                </div>
+                <div style="font-size: 12px; font-weight: bold; margin-bottom: 3px; color: #0f172a;">
+                  ${hz.headline}
+                </div>
+                <div style="font-size: 11px; color: #475569; line-height: 1.35; margin-bottom: 6px;">
+                  ${hz.description}
+                </div>
+                <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 4px 6px; font-size: 10px; font-weight: bold; color: #15803d;">
+                  🛡️ Safe Elevated Detour Active (Green Route)
+                </div>
+              </div>
+            `;
+
+            const spotInfoWindow = new window.google.maps.InfoWindow({
+              content: spotContent,
+            });
+
+            spotMarker.addListener('click', () => {
+              spotInfoWindow.open(map, spotMarker);
+            });
+
+            hazardSpotsRef.current.push(spotMarker);
+          });
+        }
       } else if (route.isRecommendedDetour) {
-        strokeColor = '#10b981'; // Green for safe detour
+        strokeColor = '#0F9D58'; // Google Maps Green for Recommended Detour
         strokeOpacity = 0.95;
         strokeWeight = isSelected ? 7 : 5;
         zIndex = isSelected ? 5 : 3;
@@ -281,41 +335,41 @@ export const GoogleCityMap: React.FC<GoogleCityMapProps> = ({
 
     // Auto-fit map to the route paths
     if (!bounds.isEmpty()) {
-      map.fitBounds(bounds, { top: 60, right: 60, bottom: 60, left: 60 });
+      map.fitBounds(bounds, { top: 50, right: 50, bottom: 50, left: 50 });
     }
   }, [mapLoaded, activeRoutes, selectedRouteId]);
 
   return (
-    <div className="relative w-full h-full min-h-[480px] rounded-2xl overflow-hidden border border-cyan-500/20 shadow-xl">
+    <div className="relative w-full h-full min-h-[480px] overflow-hidden">
       {/* Google Maps Container */}
       <div ref={mapContainerRef} className="w-full h-full min-h-[480px]" />
 
-      {/* Top Map Control Bar */}
-      <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
+      {/* Top Right Map Controls */}
+      <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5 pointer-events-auto">
         {/* Traffic Layer Toggle */}
         <button
           onClick={() => setTrafficLayerEnabled(!trafficLayerEnabled)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold backdrop-blur-md shadow-lg transition-all ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold shadow-lg transition-all cursor-pointer ${
             trafficLayerEnabled
               ? 'border-emerald-500/50 bg-emerald-500/20 text-emerald-400'
-              : 'border-slate-700 bg-slate-900/80 text-slate-400 hover:text-white'
+              : 'border-slate-700 bg-slate-900/90 text-slate-400 hover:text-white'
           }`}
         >
           <Layers size={13} />
-          <span>Live Traffic</span>
+          <span>Traffic Layer</span>
         </button>
 
         {/* Satellite Toggle */}
         <button
           onClick={() => setMapTypeId(mapTypeId === 'roadmap' ? 'hybrid' : 'roadmap')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold backdrop-blur-md shadow-lg transition-all ${
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold shadow-lg transition-all cursor-pointer ${
             mapTypeId === 'hybrid'
               ? 'border-cyan-500/50 bg-cyan-500/20 text-cyan-400'
-              : 'border-slate-700 bg-slate-900/80 text-slate-400 hover:text-white'
+              : 'border-slate-700 bg-slate-900/90 text-slate-400 hover:text-white'
           }`}
         >
           <Eye size={13} />
-          <span>{mapTypeId === 'hybrid' ? 'Vector Map' : 'Satellite'}</span>
+          <span>{mapTypeId === 'hybrid' ? 'Vector' : 'Satellite'}</span>
         </button>
 
         {/* Recenter Vadodara */}
@@ -327,34 +381,10 @@ export const GoogleCityMap: React.FC<GoogleCityMapProps> = ({
             }
           }}
           title="Recenter on Vadodara"
-          className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-700 bg-slate-900/80 text-slate-300 hover:text-white hover:bg-slate-800 backdrop-blur-md shadow-lg transition"
+          className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-700 bg-slate-900/90 text-slate-300 hover:text-white hover:bg-slate-800 shadow-lg transition cursor-pointer"
         >
           <Compass size={14} />
         </button>
-      </div>
-
-      {/* Bottom Map Legend */}
-      <div className="absolute bottom-3 left-3 z-10 flex flex-wrap items-center gap-2 rounded-xl border border-slate-700/60 bg-slate-950/80 px-3 py-1.5 text-[10px] font-mono backdrop-blur-md text-slate-300 shadow-xl">
-        <span className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-          Safe / Optimal
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
-          Surge Warning
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
-          Hazard / Submerged
-        </span>
-        <span className="flex items-center gap-1.5 border-l border-slate-700 pl-2">
-          <span className="h-1 w-4 rounded bg-emerald-400" />
-          Safe Detour
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-1 w-4 rounded bg-red-500" />
-          Blocked Road
-        </span>
       </div>
     </div>
   );

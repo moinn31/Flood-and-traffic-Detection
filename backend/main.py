@@ -681,8 +681,15 @@ async def detect_traffic_media(
         if img is None:
             raise HTTPException(status_code=400, detail="Invalid image file format")
 
+        # Optimize size for high-speed inference (<80ms)
         h, w, _ = img.shape
-        results = model.predict(img, conf=confidence, classes=[2, 3, 5, 7], verbose=False)
+        max_dim = max(h, w)
+        if max_dim > 1024:
+            scale = 1024.0 / max_dim
+            img = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+            h, w, _ = img.shape
+
+        results = model.predict(img, conf=confidence, imgsz=640, classes=[2, 3, 5, 7], verbose=False)
         result = results[0]
 
         counts = {"car": 0, "bike": 0, "truck": 0, "bus": 0}
@@ -750,9 +757,13 @@ async def detect_traffic_media(
             fps = float(cap.get(cv2.CAP_PROP_FPS) or 25.0)
             duration_sec = round(total_frames / fps, 1) if fps > 0 else 0
 
-            # Sample frames (every 1 second or max 24 samples)
-            sample_interval = max(1, int(fps))
-            frame_indices = list(range(0, total_frames, sample_interval))[:24]
+            # High-speed smart sampling: 6-8 evenly spaced keyframes
+            target_samples = min(8, max(3, int(duration_sec)))
+            if total_frames <= target_samples:
+                frame_indices = list(range(total_frames))
+            else:
+                step = total_frames / target_samples
+                frame_indices = [int(i * step) for i in range(target_samples)]
 
             samples = []
             max_detected = -1
@@ -762,10 +773,15 @@ async def detect_traffic_media(
             for f_idx in frame_indices:
                 cap.set(cv2.CAP_PROP_POS_FRAMES, f_idx)
                 ret, frame = cap.read()
-                if not ret:
+                if not ret or frame is None:
                     continue
 
-                res = model.predict(frame, conf=confidence, classes=[2, 3, 5, 7], verbose=False)[0]
+                fh, fw, _ = frame.shape
+                if max(fh, fw) > 720:
+                    scale = 720.0 / max(fh, fw)
+                    frame = cv2.resize(frame, (int(fw * scale), int(fh * scale)), interpolation=cv2.INTER_AREA)
+
+                res = model.predict(frame, conf=confidence, imgsz=640, classes=[2, 3, 5, 7], verbose=False)[0]
                 c_counts = {"car": 0, "bike": 0, "truck": 0, "bus": 0}
                 for b in res.boxes:
                     cls_id = int(b.cls[0].item())
