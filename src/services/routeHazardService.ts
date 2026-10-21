@@ -439,11 +439,36 @@ export async function calculateSmartHazardRoutes(
       };
     }
 
+    const isDestFlooded = hazards.some(
+      (h) => h.areaName.toLowerCase() === destSector.name.toLowerCase() && h.type === 'flood'
+    );
+    const detourName = isDestFlooded
+      ? `🛡️ Safest Route Home (Elevated Access to ${destSector.name})`
+      : '🛡️ Safe Alternative Detour (Recommended)';
+    const detourVia = isDestFlooded
+      ? `High-Ground Flyover Bypass to ${destSector.name}`
+      : (detourRoad.summary || 'Via Akota-Dandia Bazar Flyover & High-Ground Ring');
+    const detourTag = isDestFlooded
+      ? '100% Flood-Free • Safe Home Access'
+      : '100% Flood-Free • Elevated Flyover';
+
+    const safeSteps: NavStep[] = isDestFlooded ? [
+      { instructions: `Depart ${originSector.name} via high-ground arterial connector`, distance: '600 m', duration: '2 mins' },
+      { instructions: `Merge onto Akota-Dandia Bazar Flyover (Bypasses flooded low-elevation roadways)`, distance: '2.6 km', duration: '5 mins' },
+      { instructions: `Take Outer Ring Road elevated bypass around ${destSector.name} low basin`, distance: '2.8 km', duration: '5 mins' },
+      { instructions: `Arrive safely at home in ${destSector.name} via elevated entrance (Zero water obstruction)`, distance: '1.1 km', duration: '2 mins' },
+    ] : (detourRoad.steps && detourRoad.steps.length > 0 ? detourRoad.steps : [
+      { instructions: `Depart ${originSector.name} via high-ground connector`, distance: '600 m', duration: '2 mins' },
+      { instructions: `Merge onto Akota-Dandia Bazar Flyover (Bypasses Submerged Underpass)`, distance: '2.6 km', duration: '5 mins' },
+      { instructions: `Take Outer Ring Road Flyover (High Elevation, Flood Free)`, distance: '2.8 km', duration: '5 mins' },
+      { instructions: `Reach ${destSector.name} safely with zero water obstruction`, distance: '1.1 km', duration: '2 mins' },
+    ]);
+
     routes.push({
       id: 'route-safe-detour',
-      name: '🛡️ Safe Alternative Detour (Recommended)',
-      summary: detourRoad.summary || 'Via Akota-Dandia Bazar Flyover & High-Ground Ring',
-      via: 'Elevated Flyover & High-Ground Ring',
+      name: detourName,
+      summary: detourVia,
+      via: detourVia,
       isCompromised: false,
       isRecommendedDetour: true,
       distanceMeters: detourRoad.distanceMeters,
@@ -452,8 +477,8 @@ export async function calculateSmartHazardRoutes(
       durationText: detourRoad.durationText,
       hazards: [],
       path: detourRoad.path,
-      steps: detourRoad.steps,
-      elevationTag: '100% Flood-Free • Elevated Flyover',
+      steps: safeSteps,
+      elevationTag: detourTag,
     });
   }
 

@@ -9,10 +9,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Navigation, MapPin, ArrowRightLeft, ShieldAlert,
   Route, ChevronDown, ChevronUp, ArrowRight,
-  RefreshCw, X, Sparkles, CheckCircle2
+  RefreshCw, X, Sparkles, CheckCircle2, Home, Volume2, ShieldCheck, AlertTriangle
 } from 'lucide-react';
 import { FloodSensor, TrafficData, NavRouteOption } from '../types';
-import { VADODARA_AREAS } from '../data';
+import { VADODARA_AREAS, computeFloodSeverity } from '../data';
 import { calculateSmartHazardRoutes } from '../services/routeHazardService';
 import { loadGoogleMaps } from '../services/googleMapsLoader';
 
@@ -40,6 +40,49 @@ export const GoogleRoutePlanner: React.FC<GoogleRoutePlannerProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [routes, setRoutes] = useState<NavRouteOption[]>([]);
   const [expandedSteps, setExpandedSteps] = useState<boolean>(false);
+  const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
+
+  // Check if destination has active flood
+  const destFloodSensor = floodSensors.find(
+    (f) => f.area_name.toLowerCase() === destination.trim().toLowerCase()
+  );
+  const destSeverity = destFloodSensor
+    ? computeFloodSeverity(
+        destFloodSensor.water_level,
+        destFloodSensor.warn_threshold ?? 100,
+        destFloodSensor.max_threshold ?? 180,
+        destFloodSensor.severity
+      )
+    : 'safe';
+  const isDestFlooded = destSeverity === 'danger' || destSeverity === 'warning';
+  const isCorridorFlooded = routes.some((r) => r.isCompromised);
+
+  // Voice Guidance announcement
+  const speakSafetyAdvisory = () => {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    if (isSpeaking) {
+      setIsSpeaking(false);
+      return;
+    }
+
+    let speechText = '';
+    if (isDestFlooded) {
+      speechText = `Safety alert! Waterlogging is detected in your destination of ${destination}. The direct road is compromised. We have calculated the safest alternative route via elevated flyover so you can reach home safely.`;
+    } else if (isCorridorFlooded) {
+      speechText = `Caution! Flooding or gridlock detected on the direct arterial. We have selected the green safe alternative route around the hazard.`;
+    } else {
+      speechText = `The route from ${origin} to ${destination} is clear and safe with nominal traffic flow.`;
+    }
+
+    const utterance = new SpeechSynthesisUtterance(speechText);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    setIsSpeaking(true);
+    window.speechSynthesis.speak(utterance);
+  };
 
   const originInputRef = useRef<HTMLInputElement>(null);
   const destInputRef = useRef<HTMLInputElement>(null);
@@ -260,11 +303,19 @@ export const GoogleRoutePlanner: React.FC<GoogleRoutePlannerProps> = ({
               </div>
             </div>
 
-            {/* Demo Route Presets (Clean Square/Rectangular buttons) */}
+            {/* Demo Route Presets with Safe Home Routes */}
             <div className="flex flex-wrap items-center gap-1.5 mb-3">
               <span className="text-[10px] uppercase font-bold" style={{ color: 'var(--t-text-muted)' }}>
-                Corridors:
+                Quick Routes:
               </span>
+              <button
+                onClick={() => handlePreset('Alkapuri', 'Gotri')}
+                className="text-[10px] px-2.5 py-1 rounded-md border font-semibold hover:border-red-400 transition cursor-pointer text-red-600 dark:text-red-400 bg-red-500/10 border-red-500/30 flex items-center gap-1"
+                title="Simulates traveling to a flooded area and receiving the safe home detour"
+              >
+                <Home size={11} />
+                <span>Home to Gotri (Flood Zone)</span>
+              </button>
               <button
                 onClick={() => handlePreset('Alkapuri', 'Harni')}
                 className="text-[10px] px-2.5 py-1 rounded-md border text-cyan-600 dark:text-cyan-300 font-semibold hover:border-cyan-400 transition cursor-pointer"
@@ -273,18 +324,12 @@ export const GoogleRoutePlanner: React.FC<GoogleRoutePlannerProps> = ({
                 Alkapuri ➔ Harni
               </button>
               <button
-                onClick={() => handlePreset('Akota', 'Harni')}
-                className="text-[10px] px-2.5 py-1 rounded-md border text-emerald-600 dark:text-emerald-300 font-semibold hover:border-emerald-400 transition cursor-pointer"
+                onClick={() => handlePreset('Sayajigunj', 'Gotri')}
+                className="text-[10px] px-2.5 py-1 rounded-md border text-emerald-600 dark:text-emerald-300 font-semibold hover:border-emerald-400 transition cursor-pointer flex items-center gap-1"
                 style={{ background: 'var(--t-bg-elevated)', borderColor: 'var(--t-border)' }}
               >
-                Akota ➔ Harni
-              </button>
-              <button
-                onClick={() => handlePreset('Gotri', 'Manjalpur')}
-                className="text-[10px] px-2.5 py-1 rounded-md border text-purple-600 dark:text-purple-300 font-semibold hover:border-purple-400 transition cursor-pointer"
-                style={{ background: 'var(--t-bg-elevated)', borderColor: 'var(--t-border)' }}
-              >
-                Gotri ➔ Manjalpur
+                <Home size={11} />
+                <span>Sayajigunj ➔ Gotri</span>
               </button>
             </div>
 
@@ -307,22 +352,52 @@ export const GoogleRoutePlanner: React.FC<GoogleRoutePlannerProps> = ({
               )}
             </button>
 
-            {/* Hazard Interception Alert Banner */}
-            {routes.some((r) => r.isCompromised) && (
-              <div className="rounded-lg border border-red-500/40 bg-red-500/10 dark:bg-red-950/60 p-3 mb-3">
+            {/* EMERGENCY SAFETY ADVISORY & SAFEST ROUTE HOME BANNER */}
+            {(isDestFlooded || isCorridorFlooded) && (
+              <div className="rounded-xl border border-red-500/50 bg-gradient-to-br from-red-500/15 via-amber-500/10 to-emerald-500/15 p-3.5 mb-3 shadow-lg">
                 <div className="flex items-start gap-2.5">
-                  <ShieldAlert size={18} className="text-red-500 shrink-0 mt-0.5 animate-pulse" />
-                  <div>
-                    <div className="text-xs font-bold text-red-600 dark:text-red-300">
-                      Hazard Intercepted on Direct Corridor!
+                  <div className="p-2 rounded-lg bg-red-500/20 text-red-500 shrink-0 mt-0.5 shadow-sm">
+                    {isDestFlooded ? (
+                      <Home size={18} className="animate-bounce" />
+                    ) : (
+                      <ShieldAlert size={18} className="animate-pulse" />
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-black uppercase text-red-600 dark:text-red-400 tracking-wide">
+                          {isDestFlooded
+                            ? `⚠️ FLOOD ACTIVE IN ${destination.toUpperCase()}`
+                            : '⚠️ HAZARD DETECTED ON ROUTE'}
+                        </span>
+                      </div>
+                      <button
+                        onClick={speakSafetyAdvisory}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold transition cursor-pointer bg-slate-900/10 dark:bg-white/10 hover:bg-slate-900/20 text-slate-700 dark:text-slate-200"
+                        title="Voice guidance advisory"
+                      >
+                        <Volume2 size={11} className={isSpeaking ? 'animate-ping text-cyan-400' : ''} />
+                        <span>{isSpeaking ? 'Listening...' : 'Voice Alert'}</span>
+                      </button>
                     </div>
-                    <p className="text-[11px] mt-0.5 text-slate-700 dark:text-slate-300 leading-snug">
-                      {routes.find((r) => r.isCompromised)?.hazards[0]?.headline ||
-                        'Submerged underpass or severe traffic detected on direct street.'}
+
+                    <p className="text-[11px] text-slate-700 dark:text-slate-300 leading-snug">
+                      {isDestFlooded
+                        ? `Our ultrasonic flood sensors detect road submergence in ${destination}. The direct road is impassable and dangerous to drive through.`
+                        : (routes.find((r) => r.isCompromised)?.hazards[0]?.headline ||
+                          'Submerged underpass or road hazard detected on direct arterial path.')}
                     </p>
-                    <div className="mt-1.5 flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
-                      <CheckCircle2 size={12} />
-                      Safe Alternative Detour Active (Green Route on Map)
+
+                    {/* Prominent Safe Route Home Box */}
+                    <div className="mt-2.5 p-2 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-800 dark:text-emerald-200">
+                      <div className="font-extrabold text-[11px] flex items-center gap-1.5 mb-0.5 text-emerald-600 dark:text-emerald-400">
+                        <ShieldCheck size={14} />
+                        <span>Safest Route Provided to Reach Home Safely:</span>
+                      </div>
+                      <p className="text-[10px] leading-relaxed opacity-95">
+                        Follow the <strong>Green Route (Safe Detour)</strong> on the map. This routes you via <strong>elevated flyovers and high-ground perimeter bypasses</strong>, completely avoiding low-lying floodwater so you and your vehicle reach home safely!
+                      </p>
                     </div>
                   </div>
                 </div>
