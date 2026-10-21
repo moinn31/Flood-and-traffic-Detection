@@ -66,6 +66,9 @@ class FloodDataIn(BaseModel):
     longitude: float
     water_level: float
     status: str = "online"
+    max_threshold: Optional[float] = None
+    warn_threshold: Optional[float] = None
+    severity: Optional[str] = None
 
 class FloodDataOut(BaseModel):
     id: str
@@ -328,17 +331,28 @@ async def get_flood_data():
 
 @app.post("/api/flood-data")
 async def post_flood_data(data: FloodDataIn):
-    severity = "danger" if data.water_level >= 180 else (
-        "warning" if data.water_level >= 100 else "safe"
-    )
+    max_thr = data.max_threshold if data.max_threshold is not None else 180.0
+    warn_thr = data.warn_threshold if data.warn_threshold is not None else 100.0
+
+    if data.severity and data.severity.lower() in ("safe", "warning", "danger"):
+        severity = data.severity.lower()
+    elif max_thr < warn_thr:
+        severity = "danger" if data.water_level <= max_thr else (
+            "warning" if data.water_level <= warn_thr else "safe"
+        )
+    else:
+        severity = "danger" if data.water_level >= max_thr else (
+            "warning" if data.water_level >= warn_thr else "safe"
+        )
+
     record = {
         "sensor_name": data.sensor_name,
         "area_name": data.area_name,
         "latitude": data.latitude,
         "longitude": data.longitude,
         "water_level": data.water_level,
-        "max_threshold": 180,
-        "warn_threshold": 100,
+        "max_threshold": max_thr,
+        "warn_threshold": warn_thr,
         "status": data.status,
         "severity": severity,
         "last_updated": datetime.utcnow().isoformat(),

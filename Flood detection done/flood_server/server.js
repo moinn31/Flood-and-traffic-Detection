@@ -207,6 +207,9 @@ app.post("/flood", async (req, res) => {
           water_level: record.water_level,
           latitude: record.latitude,
           longitude: record.longitude,
+          max_threshold: record.max_threshold,
+          warn_threshold: record.warn_threshold,
+          severity: record.severity,
           status: record.status
         }),
         signal: AbortSignal.timeout(1500)

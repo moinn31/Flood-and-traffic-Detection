@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { FloodSensor, TrafficData, Alert, NavRouteOption } from '../types';
 import { GoogleCityMap } from './GoogleCityMap';
-import { VADODARA_CENTER, MAP_ZOOM, VADODARA_AREAS } from '../data';
+import { VADODARA_CENTER, MAP_ZOOM, VADODARA_AREAS, computeFloodSeverity } from '../data';
 import { VADODARA_ROUTE_PROFILES, getRouteAdviceForArea } from '../routingData';
 
 interface CityMapProps {
@@ -236,33 +236,32 @@ export default function CityMap({
       const waterLevel = flood ? flood.water_level : 0;
       const trafficPct = traffic ? traffic.traffic_percentage : 20;
 
-      const maxThr = flood?.max_threshold ?? 180;
-      const warnThr = flood?.warn_threshold ?? 100;
-      const isUltrasonicMode = maxThr < warnThr;
+      const floodSeverityState = computeFloodSeverity(
+        waterLevel,
+        flood?.warn_threshold ?? 100,
+        flood?.max_threshold ?? 180,
+        flood?.severity
+      );
 
-      const isFloodDanger = flood ? (
-        flood.severity === 'danger' ||
-        (isUltrasonicMode ? waterLevel <= maxThr : waterLevel >= maxThr)
-      ) : false;
+      const isFloodDanger = floodSeverityState === 'danger';
+      const isFloodWarn = floodSeverityState === 'warning';
+      const isFloodSafe = floodSeverityState === 'safe';
+
       const isTrafficDanger = trafficPct >= 75 || traffic?.traffic_level === 'heavy';
-      const isFloodWarn = flood && !isFloodDanger ? (
-        flood.severity === 'warning' ||
-        (isUltrasonicMode ? waterLevel <= warnThr : waterLevel >= warnThr)
-      ) : false;
       const isTrafficWarn = !isTrafficDanger && (trafficPct >= 50 || traffic?.traffic_level === 'medium');
 
       const isDanger = isFloodDanger || isTrafficDanger;
       const isWarn = !isDanger && (isFloodWarn || isTrafficWarn);
 
       let statusType: 'safe' | 'warn' | 'danger' = 'safe';
-      let statText = 'Operational • Safe';
+      let statText = 'Safe • Clear';
 
       if (isDanger) {
         statusType = 'danger';
-        statText = isFloodDanger ? `SURGE ${waterLevel.toFixed(0)}cm` : `JAM ${trafficPct}%`;
+        statText = isFloodDanger ? ('SURGE ' + waterLevel.toFixed(0) + 'cm') : ('JAM ' + trafficPct + '%');
       } else if (isWarn) {
         statusType = 'warn';
-        statText = isFloodWarn ? `Watch ${waterLevel.toFixed(0)}cm` : `Moderate ${trafficPct}%`;
+        statText = isFloodWarn ? ('Caution ' + waterLevel.toFixed(0) + 'cm') : ('Moderate ' + trafficPct + '%');
       }
 
       const routeAdvice = getRouteAdviceForArea(area.name, waterLevel, trafficPct);
@@ -277,6 +276,8 @@ export default function CityMap({
         isWarn,
         isFloodDanger,
         isFloodWarn,
+        isFloodSafe,
+        floodSeverityState,
         flood,
         traffic,
         routeAdvice,
@@ -466,12 +467,16 @@ export default function CityMap({
             <span style={{ color: 'var(--t-text-secondary)' }}>Warning Threshold (&ge;100cm)</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-sm animate-ping" />
-            <span className="font-bold text-rose-600 dark:text-rose-400">Critical Surge / Gridlock</span>
+            <span className="w-3 h-3 rounded-full bg-emerald-500/30 border border-emerald-500 shadow-sm" />
+            <span className="font-bold text-emerald-600 dark:text-emerald-400">🟢 Green Spot = Safe (No Flood)</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="w-3.5 h-3.5 rounded-full bg-red-500/30 border-2 border-red-500 shadow-sm" />
-            <span className="font-bold text-red-600 dark:text-red-400">Flood Inundation Spot (Whole Area)</span>
+            <span className="w-3 h-3 rounded-full bg-amber-500/30 border border-amber-500 shadow-sm" />
+            <span className="font-bold text-amber-600 dark:text-amber-400">🟡 Yellow Spot = Near Flood Warning</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 rounded-full bg-red-500/30 border border-red-500 shadow-sm animate-pulse" />
+            <span className="font-bold text-red-600 dark:text-red-400">🔴 Red Spot = Critical Flood Hazard</span>
           </div>
 
           <div className="pt-1.5 border-t flex flex-col gap-1" style={{ borderColor: 'var(--t-border)' }}>
@@ -655,82 +660,181 @@ export default function CityMap({
         <MapFlyController targetCoord={flyCoord} />
         <MapResizer isSimplified={isSimplified} />
 
-        {/* 0. WHOLE-AREA RED FLOOD HAZARD SPOTS (Active Sensor Detected Inundation) */}
-        {sectorEvaluations
-          .filter(s => s.isFloodDanger || s.isFloodWarn)
-          .map(({ area, isFloodDanger, isFloodWarn, waterLevel }) => (
-            <React.Fragment key={`flood-hazard-area-${area.name}`}>
-              {/* Outer Warning Ripple Ring */}
-              <Circle
-                center={[area.lat, area.lng]}
-                radius={1150}
-                pathOptions={{
-                  color: '#ef4444',
-                  fillColor: '#ef4444',
-                  fillOpacity: 0.08,
-                  weight: 1,
-                  dashArray: '4, 8',
-                }}
-              />
-              {/* Main Prominent Red Spot covering the whole area */}
-              <Circle
-                center={[area.lat, area.lng]}
-                radius={850}
-                pathOptions={{
-                  color: '#ef4444',
-                  fillColor: '#ef4444',
-                  fillOpacity: isFloodDanger ? 0.35 : 0.22,
-                  weight: isFloodDanger ? 3.5 : 2,
-                  dashArray: '6, 6',
-                  className: 'flood-hazard-circle-pulse',
-                }}
-              >
-                <Popup>
-                  <div className="p-2.5 text-slate-900 dark:text-slate-100 min-w-[210px]">
-                    <div className="flex items-center gap-1.5 pb-1 mb-1.5 border-b border-red-500/30">
-                      <span className="text-lg">🌊</span>
-                      <span className="font-extrabold text-xs text-red-600 dark:text-red-400 uppercase tracking-wide">
-                        {isFloodDanger ? 'CRITICAL FLOOD ZONE' : 'HIGH WATER ADVISORY'}
-                      </span>
-                    </div>
-                    <div className="text-sm font-black mb-1 text-slate-900 dark:text-white">
-                      {area.name} Inundation Sector
-                    </div>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="text-slate-600 dark:text-slate-300">Hydro Water Level:</span>
-                      <span className="font-bold text-red-600 dark:text-red-400">{waterLevel.toFixed(1)} cm</span>
-                    </div>
-                    <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug mb-2">
-                      {isFloodDanger
-                        ? 'Live IoT sensor telemetry indicates dangerous road inundation. Passability blocked.'
-                        : 'Water level elevated above baseline warning threshold. Exercise caution.'}
-                    </p>
-                    <div className="rounded bg-red-500/10 border border-red-500/30 p-1.5 text-[10px] font-bold text-red-600 dark:text-red-400 text-center">
-                      ⛔ Entire {area.name} Area Flagged in Red
-                    </div>
-                  </div>
-                </Popup>
-              </Circle>
-              {/* Pulsing Beacon Icon at Center */}
-              <Marker
-                position={[area.lat, area.lng]}
-                icon={L.divIcon({
-                  className: 'flood-area-red-spot',
-                  html: `
-                    <div style="position: relative; width: 64px; height: 64px; display: flex; align-items: center; justify-content: center; pointer-events: none;">
-                      <div style="position: absolute; inset: 0; border-radius: 50%; background: rgba(239, 68, 68, 0.45); animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
-                      <div style="position: absolute; width: 75%; height: 75%; border-radius: 50%; background: rgba(239, 68, 68, 0.6); animation: pulse 1.5s ease-in-out infinite;"></div>
-                      <div style="position: relative; width: 34px; height: 34px; border-radius: 50%; background: #ef4444; border: 3px solid #ffffff; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 20px rgba(239, 68, 68, 1); color: white; font-size: 16px;">
-                        🌊
+        {/* 0. INTELLIGENT SECTOR FLOOD SPOTS (GREEN = SAFE, YELLOW = WARNING, RED = DANGER) */}
+        {sectorEvaluations.map(({ area, isFloodDanger, isFloodWarn, isFloodSafe, floodSeverityState, waterLevel }) => {
+          if (isFloodDanger) {
+            // RED SPOT — ACTIVE FLOOD DANGER ZONE
+            return (
+              <React.Fragment key={`flood-spot-red-${area.name}`}>
+                <Circle
+                  center={[area.lat, area.lng]}
+                  radius={1100}
+                  pathOptions={{
+                    color: '#ef4444',
+                    fillColor: '#ef4444',
+                    fillOpacity: 0.08,
+                    weight: 1,
+                    dashArray: '4, 8',
+                  }}
+                />
+                <Circle
+                  center={[area.lat, area.lng]}
+                  radius={750}
+                  pathOptions={{
+                    color: '#ef4444',
+                    fillColor: '#ef4444',
+                    fillOpacity: 0.35,
+                    weight: 3,
+                    dashArray: '6, 6',
+                    className: 'flood-hazard-circle-pulse',
+                  }}
+                >
+                  <Popup>
+                    <div className="p-2.5 text-slate-900 dark:text-slate-100 min-w-[210px]">
+                      <div className="flex items-center gap-1.5 pb-1 mb-1.5 border-b border-red-500/30">
+                        <span className="text-lg">🌊</span>
+                        <span className="font-extrabold text-xs text-red-600 dark:text-red-400 uppercase tracking-wide">
+                          CRITICAL FLOOD ZONE
+                        </span>
+                      </div>
+                      <div className="text-sm font-black mb-1 text-slate-900 dark:text-white">
+                        {area.name} Red Inundation Zone
+                      </div>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="text-slate-600 dark:text-slate-300">Hydro Water Level:</span>
+                        <span className="font-bold text-red-600 dark:text-red-400">{waterLevel.toFixed(1)} cm</span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug mb-2">
+                        Sensor detects dangerous roadway flooding. Roadway passability compromised.
+                      </p>
+                      <div className="rounded bg-red-500/10 border border-red-500/30 p-1.5 text-[10px] font-bold text-red-600 dark:text-red-400 text-center">
+                        🔴 Entire Sector Flagged in Red — Detour Active
                       </div>
                     </div>
-                  `,
-                  iconSize: [64, 64],
-                  iconAnchor: [32, 32],
-                })}
-              />
-            </React.Fragment>
-          ))}
+                  </Popup>
+                </Circle>
+                <Marker
+                  position={[area.lat, area.lng]}
+                  icon={L.divIcon({
+                    className: 'flood-area-red-spot',
+                    html: `
+                      <div style="position: relative; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; pointer-events: none;">
+                        <div style="position: absolute; inset: 0; border-radius: 50%; background: rgba(239, 68, 68, 0.45); animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
+                        <div style="position: relative; width: 30px; height: 30px; border-radius: 50%; background: #ef4444; border: 2.5px solid #ffffff; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 16px rgba(239, 68, 68, 1); color: white; font-size: 14px;">
+                          🌊
+                        </div>
+                      </div>
+                    `,
+                    iconSize: [44, 44],
+                    iconAnchor: [22, 22],
+                  })}
+                />
+              </React.Fragment>
+            );
+          } else if (isFloodWarn) {
+            // YELLOW SPOT — NEAR FLOOD / WARNING ZONE
+            return (
+              <React.Fragment key={`flood-spot-yellow-${area.name}`}>
+                <Circle
+                  center={[area.lat, area.lng]}
+                  radius={800}
+                  pathOptions={{
+                    color: '#f59e0b',
+                    fillColor: '#f59e0b',
+                    fillOpacity: 0.06,
+                    weight: 1,
+                    dashArray: '3, 6',
+                  }}
+                />
+                <Circle
+                  center={[area.lat, area.lng]}
+                  radius={550}
+                  pathOptions={{
+                    color: '#f59e0b',
+                    fillColor: '#f59e0b',
+                    fillOpacity: 0.25,
+                    weight: 2.2,
+                    dashArray: '5, 5',
+                    className: 'flood-warning-circle-pulse',
+                  }}
+                >
+                  <Popup>
+                    <div className="p-2.5 text-slate-900 dark:text-slate-100 min-w-[210px]">
+                      <div className="flex items-center gap-1.5 pb-1 mb-1.5 border-b border-amber-500/30">
+                        <span className="text-lg">⚠️</span>
+                        <span className="font-extrabold text-xs text-amber-600 dark:text-amber-400 uppercase tracking-wide">
+                          NEAR-FLOOD YELLOW ZONE
+                        </span>
+                      </div>
+                      <div className="text-sm font-black mb-1 text-slate-900 dark:text-white">
+                        {area.name} Warning Sector
+                      </div>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="text-slate-600 dark:text-slate-300">Hydro Water Level:</span>
+                        <span className="font-bold text-amber-600 dark:text-amber-400">{waterLevel.toFixed(1)} cm</span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-snug mb-2">
+                        Water level rising towards critical threshold. Exercise caution when transiting.
+                      </p>
+                      <div className="rounded bg-amber-500/10 border border-amber-500/30 p-1.5 text-[10px] font-bold text-amber-600 dark:text-amber-400 text-center">
+                        🟡 Sector in Yellow Warning Advisory
+                      </div>
+                    </div>
+                  </Popup>
+                </Circle>
+                <Marker
+                  position={[area.lat, area.lng]}
+                  icon={L.divIcon({
+                    className: 'flood-area-red-spot',
+                    html: `
+                      <div style="position: relative; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; pointer-events: none;">
+                        <div style="position: absolute; inset: 0; border-radius: 50%; background: rgba(245, 158, 11, 0.4); animation: pulse 2s infinite;"></div>
+                        <div style="position: relative; width: 24px; height: 24px; border-radius: 50%; background: #f59e0b; border: 2px solid #ffffff; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 12px rgba(245, 158, 11, 0.9); color: white; font-size: 11px; font-weight: bold;">
+                          ⚠️
+                        </div>
+                      </div>
+                    `,
+                    iconSize: [38, 38],
+                    iconAnchor: [19, 19],
+                  })}
+                />
+              </React.Fragment>
+            );
+          } else {
+            // GREEN SPOT — SAFE / NO FLOOD ZONE
+            return (
+              <React.Fragment key={`flood-spot-green-${area.name}`}>
+                <Circle
+                  center={[area.lat, area.lng]}
+                  radius={380}
+                  pathOptions={{
+                    color: '#10b981',
+                    fillColor: '#10b981',
+                    fillOpacity: 0.16,
+                    weight: 1.5,
+                  }}
+                >
+                  <Tooltip sticky>
+                    <div className="font-sans text-xs">
+                      <strong>🟢 {area.name}</strong> • Safe / No Flood ({waterLevel.toFixed(1)} cm)
+                    </div>
+                  </Tooltip>
+                </Circle>
+                <Marker
+                  position={[area.lat, area.lng]}
+                  icon={L.divIcon({
+                    className: 'flood-area-red-spot',
+                    html: `
+                      <div style="width: 14px; height: 14px; border-radius: 50%; background: #10b981; border: 2px solid #ffffff; box-shadow: 0 0 8px rgba(16, 185, 129, 0.8);"></div>
+                    `,
+                    iconSize: [14, 14],
+                    iconAnchor: [7, 7],
+                  })}
+                />
+              </React.Fragment>
+            );
+          }
+        })}
 
         {/* 1. SECTOR STATUS BADGE MARKERS (ALL 11 SECTORS LABELED) */}
         {showAreaBadges && sectorEvaluations.map(({ area, statusType, statText, waterLevel, trafficPct }) => {

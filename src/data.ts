@@ -25,11 +25,32 @@ export const VADODARA_AREAS = [
 
 // ========== FLOOD SENSOR DATA ==========
 
-const floodSeverity = (level: number, warn: number, max: number): 'safe' | 'warning' | 'danger' => {
+export const computeFloodSeverity = (
+  level: number,
+  warn: number = 100,
+  max: number = 180,
+  explicitSeverity?: string
+): 'safe' | 'warning' | 'danger' => {
+  const raw = (explicitSeverity || '').toLowerCase().trim();
+  if (raw === 'danger' || raw === 'critical') return 'danger';
+  if (raw === 'warning' || raw === 'warn') return 'warning';
+  if (raw === 'safe' || raw === 'normal') return 'safe';
+
+  // Inverted Ultrasonic Distance Mode (max < warn, e.g. 7cm max threshold, 15cm warn threshold)
+  // Smaller distance to sensor means water has risen close to bridge/road level
+  if (max < warn) {
+    if (level <= max) return 'danger';
+    if (level <= warn) return 'warning';
+    return 'safe';
+  }
+
+  // Standard Water Depth Mode (e.g. 100cm warn, 180cm max)
   if (level >= max) return 'danger';
   if (level >= warn) return 'warning';
   return 'safe';
 };
+
+const floodSeverity = computeFloodSeverity;
 
 export const generateFloodSensors = (): FloodSensor[] => {
   return VADODARA_AREAS.map((area, i) => {

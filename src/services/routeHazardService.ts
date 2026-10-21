@@ -6,7 +6,7 @@
 
 import { FloodSensor, TrafficData, NavigationHazard, NavRouteOption, NavStep } from '../types';
 import { VADODARA_ROUTE_PROFILES } from '../routingData';
-import { VADODARA_AREAS } from '../data';
+import { VADODARA_AREAS, computeFloodSeverity } from '../data';
 
 // Helper: Haversine distance in meters
 export function getDistanceMeters(
@@ -104,11 +104,14 @@ export function detectRouteHazards(
 
   // 1. Check against dynamic flood sensors
   floodSensors.forEach((sensor) => {
-    const maxThr = sensor.max_threshold ?? 180;
-    const warnThr = sensor.warn_threshold ?? 100;
-    const isUltrasonic = maxThr < warnThr;
-    const isDanger = sensor.severity === 'danger' || (isUltrasonic ? sensor.water_level <= maxThr : sensor.water_level >= maxThr);
-    const isWarning = !isDanger && (sensor.severity === 'warning' || (isUltrasonic ? sensor.water_level <= warnThr : sensor.water_level >= warnThr));
+    const floodState = computeFloodSeverity(
+      sensor.water_level,
+      sensor.warn_threshold ?? 100,
+      sensor.max_threshold ?? 180,
+      sensor.severity
+    );
+    const isDanger = floodState === 'danger';
+    const isWarning = floodState === 'warning';
 
     if (!isDanger && !isWarning) return;
 

@@ -6,6 +6,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { FloodSensor, TrafficData, Alert, NavRouteOption } from '../types';
+import { computeFloodSeverity } from '../data';
 import { loadGoogleMaps } from '../services/googleMapsLoader';
 import { Layers, Eye, Compass } from 'lucide-react';
 
@@ -167,25 +168,25 @@ export const GoogleCityMap: React.FC<GoogleCityMapProps> = ({
     const map = mapInstanceRef.current;
 
     floodSensors.forEach((sensor) => {
-      const maxThr = sensor.max_threshold ?? 180;
-      const warnThr = sensor.warn_threshold ?? 100;
-      const isUltrasonicMode = maxThr < warnThr;
-
-      const isDanger = sensor.severity === 'danger' ||
-        (isUltrasonicMode ? sensor.water_level <= maxThr : sensor.water_level >= maxThr);
-      const isWarning = !isDanger && (
-        sensor.severity === 'warning' ||
-        (isUltrasonicMode ? sensor.water_level <= warnThr : sensor.water_level >= warnThr)
+      const floodState = computeFloodSeverity(
+        sensor.water_level,
+        sensor.warn_threshold ?? 100,
+        sensor.max_threshold ?? 180,
+        sensor.severity
       );
+
+      const isDanger = floodState === 'danger';
+      const isWarning = floodState === 'warning';
+      const isSafe = floodState === 'safe';
 
       const matchingTraffic = trafficData.find(
         (t) => t.area_name.toLowerCase() === sensor.area_name.toLowerCase()
       );
       const isHeavyTraffic = matchingTraffic && (matchingTraffic.traffic_percentage >= 75 || matchingTraffic.traffic_level === 'heavy');
 
-      // WHOLE-AREA RED FLOOD SPOT (Inundation Hazard Zone)
-      if (isDanger || isWarning) {
-        // Outer warning ripple
+      // 3-TIER SECTOR SPOTS: GREEN = NO FLOOD, YELLOW = NEAR FLOOD, RED = FLOOD
+      if (isDanger) {
+        // Outer Ripple
         const rippleCircle = new window.google.maps.Circle({
           strokeColor: '#ef4444',
           strokeOpacity: 0.5,
@@ -194,35 +195,67 @@ export const GoogleCityMap: React.FC<GoogleCityMapProps> = ({
           fillOpacity: 0.08,
           map: map,
           center: { lat: sensor.latitude, lng: sensor.longitude },
-          radius: 1150,
+          radius: 1100,
           zIndex: 5,
         });
         floodCirclesRef.current.push(rippleCircle);
 
-        // Whole-area prominent Red Hazard Spot
-        const floodCircle = new window.google.maps.Circle({
+        // Red Hazard Spot
+        const redCircle = new window.google.maps.Circle({
           strokeColor: '#ef4444',
           strokeOpacity: 0.95,
-          strokeWeight: isDanger ? 3.5 : 2,
+          strokeWeight: 3,
           fillColor: '#ef4444',
-          fillOpacity: isDanger ? 0.35 : 0.22,
+          fillOpacity: 0.35,
           map: map,
           center: { lat: sensor.latitude, lng: sensor.longitude },
-          radius: 850,
+          radius: 750,
           zIndex: 6,
         });
-
-        floodCircle.addListener('click', () => {
+        redCircle.addListener('click', () => {
           if (onSelectArea) onSelectArea(sensor.area_name);
         });
-
-        floodCirclesRef.current.push(floodCircle);
+        floodCirclesRef.current.push(redCircle);
+      } else if (isWarning) {
+        // Yellow / Amber Warning Spot
+        const yellowCircle = new window.google.maps.Circle({
+          strokeColor: '#f59e0b',
+          strokeOpacity: 0.9,
+          strokeWeight: 2,
+          fillColor: '#f59e0b',
+          fillOpacity: 0.25,
+          map: map,
+          center: { lat: sensor.latitude, lng: sensor.longitude },
+          radius: 550,
+          zIndex: 6,
+        });
+        yellowCircle.addListener('click', () => {
+          if (onSelectArea) onSelectArea(sensor.area_name);
+        });
+        floodCirclesRef.current.push(yellowCircle);
+      } else {
+        // Green Safe Spot (No Flood)
+        const greenCircle = new window.google.maps.Circle({
+          strokeColor: '#10b981',
+          strokeOpacity: 0.8,
+          strokeWeight: 1.5,
+          fillColor: '#10b981',
+          fillOpacity: 0.16,
+          map: map,
+          center: { lat: sensor.latitude, lng: sensor.longitude },
+          radius: 380,
+          zIndex: 4,
+        });
+        greenCircle.addListener('click', () => {
+          if (onSelectArea) onSelectArea(sensor.area_name);
+        });
+        floodCirclesRef.current.push(greenCircle);
       }
 
       const markerColor = (isDanger || isHeavyTraffic)
         ? '#ef4444' // Red
         : isWarning
-        ? '#f59e0b' // Amber
+        ? '#f59e0b' // Yellow / Amber
         : '#10b981'; // Green
 
       const svgIcon = {
