@@ -86,6 +86,7 @@ export const GoogleCityMap: React.FC<GoogleCityMapProps> = ({
   const mapInstanceRef = useRef<google.maps.Map | null>(null);
   const trafficLayerRef = useRef<google.maps.TrafficLayer | null>(null);
   const markersRef = useRef<google.maps.Marker[]>([]);
+  const floodCirclesRef = useRef<google.maps.Circle[]>([]);
   const hazardSpotsRef = useRef<google.maps.Marker[]>([]);
   const polylinesRef = useRef<google.maps.Polyline[]>([]);
 
@@ -157,19 +158,66 @@ export const GoogleCityMap: React.FC<GoogleCityMapProps> = ({
   useEffect(() => {
     if (!mapLoaded || !mapInstanceRef.current || !window.google?.maps) return;
 
-    // Clear old markers
+    // Clear old markers & flood zone circles
     markersRef.current.forEach((m) => m.setMap(null));
     markersRef.current = [];
+    floodCirclesRef.current.forEach((c) => c.setMap(null));
+    floodCirclesRef.current = [];
 
     const map = mapInstanceRef.current;
 
     floodSensors.forEach((sensor) => {
-      const isDanger = sensor.water_level >= sensor.max_threshold;
-      const isWarning = sensor.water_level >= sensor.warn_threshold;
+      const maxThr = sensor.max_threshold ?? 180;
+      const warnThr = sensor.warn_threshold ?? 100;
+      const isUltrasonicMode = maxThr < warnThr;
+
+      const isDanger = sensor.severity === 'danger' ||
+        (isUltrasonicMode ? sensor.water_level <= maxThr : sensor.water_level >= maxThr);
+      const isWarning = !isDanger && (
+        sensor.severity === 'warning' ||
+        (isUltrasonicMode ? sensor.water_level <= warnThr : sensor.water_level >= warnThr)
+      );
+
       const matchingTraffic = trafficData.find(
         (t) => t.area_name.toLowerCase() === sensor.area_name.toLowerCase()
       );
-      const isHeavyTraffic = matchingTraffic && matchingTraffic.traffic_percentage >= 75;
+      const isHeavyTraffic = matchingTraffic && (matchingTraffic.traffic_percentage >= 75 || matchingTraffic.traffic_level === 'heavy');
+
+      // WHOLE-AREA RED FLOOD SPOT (Inundation Hazard Zone)
+      if (isDanger || isWarning) {
+        // Outer warning ripple
+        const rippleCircle = new window.google.maps.Circle({
+          strokeColor: '#ef4444',
+          strokeOpacity: 0.5,
+          strokeWeight: 1,
+          fillColor: '#ef4444',
+          fillOpacity: 0.08,
+          map: map,
+          center: { lat: sensor.latitude, lng: sensor.longitude },
+          radius: 1150,
+          zIndex: 5,
+        });
+        floodCirclesRef.current.push(rippleCircle);
+
+        // Whole-area prominent Red Hazard Spot
+        const floodCircle = new window.google.maps.Circle({
+          strokeColor: '#ef4444',
+          strokeOpacity: 0.95,
+          strokeWeight: isDanger ? 3.5 : 2,
+          fillColor: '#ef4444',
+          fillOpacity: isDanger ? 0.35 : 0.22,
+          map: map,
+          center: { lat: sensor.latitude, lng: sensor.longitude },
+          radius: 850,
+          zIndex: 6,
+        });
+
+        floodCircle.addListener('click', () => {
+          if (onSelectArea) onSelectArea(sensor.area_name);
+        });
+
+        floodCirclesRef.current.push(floodCircle);
+      }
 
       const markerColor = (isDanger || isHeavyTraffic)
         ? '#ef4444' // Red

@@ -104,8 +104,11 @@ export function detectRouteHazards(
 
   // 1. Check against dynamic flood sensors
   floodSensors.forEach((sensor) => {
-    const isDanger = sensor.water_level >= sensor.max_threshold || sensor.severity === 'danger';
-    const isWarning = sensor.water_level >= sensor.warn_threshold || sensor.severity === 'warning';
+    const maxThr = sensor.max_threshold ?? 180;
+    const warnThr = sensor.warn_threshold ?? 100;
+    const isUltrasonic = maxThr < warnThr;
+    const isDanger = sensor.severity === 'danger' || (isUltrasonic ? sensor.water_level <= maxThr : sensor.water_level >= maxThr);
+    const isWarning = !isDanger && (sensor.severity === 'warning' || (isUltrasonic ? sensor.water_level <= warnThr : sensor.water_level >= warnThr));
 
     if (!isDanger && !isWarning) return;
 
