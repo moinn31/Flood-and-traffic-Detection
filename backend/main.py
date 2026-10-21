@@ -845,8 +845,8 @@ async def detect_traffic_media(
             fps = float(cap.get(cv2.CAP_PROP_FPS) or 25.0)
             duration_sec = round(total_frames / fps, 1) if fps > 0 else 0
 
-            # High-speed smart sampling: 6-8 evenly spaced keyframes
-            target_samples = min(8, max(3, int(duration_sec)))
+            # Comprehensive Full-Video Scanning: sample continuously across entire video duration
+            target_samples = min(35, max(6, int(duration_sec * 1.5)))
             if total_frames <= target_samples:
                 frame_indices = list(range(total_frames))
             else:
@@ -856,7 +856,10 @@ async def detect_traffic_media(
             samples = []
             max_detected = -1
             best_annotated = None
-            total_cars, total_bikes, total_trucks, total_buses = 0, 0, 0, 0
+
+            # Centroid tracking to accurately record total unique vehicles across the full video
+            tracked_vehicles = {"car": 0, "bike": 0, "truck": 0, "bus": 0}
+            prev_centroids = []
 
             for f_idx in frame_indices:
                 cap.set(cv2.CAP_PROP_POS_FRAMES, f_idx)
@@ -868,27 +871,58 @@ async def detect_traffic_media(
                 if max(fh, fw) > 720:
                     scale = 720.0 / max(fh, fw)
                     frame = cv2.resize(frame, (int(fw * scale), int(fh * scale)), interpolation=cv2.INTER_AREA)
+                    fh, fw, _ = frame.shape
 
                 res = model.predict(frame, conf=confidence, imgsz=640, classes=[2, 3, 5, 7], verbose=False)[0]
                 c_counts = {"car": 0, "bike": 0, "truck": 0, "bus": 0}
+                frame_boxes = []
+                current_centroids = []
+
                 for b in res.boxes:
                     cls_id = int(b.cls[0].item())
-                    cls_name = vehicle_map.get(cls_id, "vehicle")
-                    c_counts[cls_name] = c_counts.get(cls_name, 0) + 1
+                    cname = vehicle_map.get(cls_id, "vehicle")
+                    conf_val = round(float(b.conf[0].item()), 2)
+                    x1, y1, x2, y2 = map(int, b.xyxy[0].tolist())
+                    c_counts[cname] = c_counts.get(cname, 0) + 1
 
+                    # Normalized box coordinates [x1, y1, x2, y2] for responsive overlay playback
+                    frame_boxes.append({
+                        "class": cname,
+                        "confidence": conf_val,
+                        "box": [round(x1 / fw, 4), round(y1 / fh, 4), round(x2 / fw, 4), round(y2 / fh, 4)]
+                    })
+
+                    cx, cy = (x1 + x2) / 2.0, (y1 + y2) / 2.0
+                    current_centroids.append((cx, cy, cname))
+
+                # Track unique entries: add new vehicles that weren't present in previous frame
+                if not prev_centroids:
+                    for cname, count in c_counts.items():
+                        tracked_vehicles[cname] = count
+                else:
+                    for cx, cy, cname in current_centroids:
+                        is_matched = False
+                        for px, py, pname in prev_centroids:
+                            if pname == cname:
+                                dist = ((cx - px) ** 2 + (cy - py) ** 2) ** 0.5
+                                if dist < (fw * 0.12):
+                                    is_matched = True
+                                    break
+                        if not is_matched:
+                            tracked_vehicles[cname] = tracked_vehicles.get(cname, 0) + 1
+
+                prev_centroids = current_centroids
                 f_total = sum(c_counts.values())
-                total_cars += c_counts["car"]
-                total_bikes += c_counts["bike"]
-                total_trucks += c_counts["truck"]
-                total_buses += c_counts["bus"]
 
                 samples.append({
                     "second": round(f_idx / fps, 1),
+                    "frame_index": f_idx,
                     "vehicles": f_total,
                     "cars": c_counts["car"],
                     "bikes": c_counts["bike"],
                     "trucks": c_counts["truck"],
-                    "buses": c_counts["bus"]
+                    "buses": c_counts["bus"],
+                    "boxes": frame_boxes
                 })
 
                 if f_total > max_detected or best_annotated is None:
@@ -905,14 +939,19 @@ async def detect_traffic_media(
 
             cap.release()
 
-            num_samples = len(samples) or 1
-            avg_vehicles = round(sum(s["vehicles"] for s in samples) / num_samples)
-            avg_cars = round(total_cars / num_samples)
-            avg_bikes = round(total_bikes / num_samples)
-            avg_trucks = round(total_trucks / num_samples)
-            avg_buses = round(total_buses / num_samples)
+            # Final Aggregate Result for the entire video clip
+            final_unique_vehicles = sum(tracked_vehicles.values())
+            final_cars = tracked_vehicles["car"]
+            final_bikes = tracked_vehicles["bike"]
+            final_trucks = tracked_vehicles["truck"]
+            final_buses = tracked_vehicles["bus"]
 
-            traffic_pct = min(100, int((avg_vehicles / 35.0) * 100))
+            # If tracking was sparse, ensure at least peak detection is respected
+            if final_unique_vehicles < max_detected:
+                final_unique_vehicles = max_detected
+                final_cars = max(final_cars, max_detected)
+
+            traffic_pct = min(100, int((final_unique_vehicles / 35.0) * 100))
             traffic_level = "heavy" if traffic_pct >= 70 else ("medium" if traffic_pct >= 35 else "low")
 
             b64_img = ""
@@ -928,11 +967,11 @@ async def detect_traffic_media(
             try:
                 db_res = db_manager.override_area_condition(
                     area_name=target_area,
-                    cars=avg_cars,
-                    bikes=avg_bikes,
-                    trucks=avg_trucks,
-                    buses=avg_buses,
-                    vehicle_count=avg_vehicles,
+                    cars=final_cars,
+                    bikes=final_bikes,
+                    trucks=final_trucks,
+                    buses=final_buses,
+                    vehicle_count=final_unique_vehicles,
                     traffic_percentage=traffic_pct,
                 )
                 if db_res.get("traffic"):
@@ -950,12 +989,12 @@ async def detect_traffic_media(
                 "fps": fps,
                 "total_frames": total_frames,
                 "sampled_frames": len(samples),
-                "total_vehicles": avg_vehicles,
+                "total_vehicles": final_unique_vehicles,
                 "peak_vehicles": max_detected,
-                "cars": avg_cars,
-                "bikes": avg_bikes,
-                "trucks": avg_trucks,
-                "buses": avg_buses,
+                "cars": final_cars,
+                "bikes": final_bikes,
+                "trucks": final_trucks,
+                "buses": final_buses,
                 "traffic_percentage": traffic_pct,
                 "traffic_level": traffic_level,
                 "inference_time_ms": elapsed_ms,

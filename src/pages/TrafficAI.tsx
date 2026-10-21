@@ -12,7 +12,7 @@ import {
 } from 'recharts';
 import {
   Car, Bike, Truck, Bus, Camera, Upload, TrendingUp,
-  MapPin, BarChart3, Eye, Zap, AlertTriangle, Play,
+  MapPin, BarChart3, Eye, Zap, AlertTriangle, Play, Pause,
   CheckCircle2, RefreshCw, X, Download, ShieldCheck, Cpu, Layers,
   Compass, Route as RouteIcon, ArrowRight, ShieldAlert
 } from 'lucide-react';
@@ -123,8 +123,94 @@ export default function TrafficAI({ trafficData, alerts }: TrafficPageProps) {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [detectionResult, setDetectionResult] = useState<DetectionResult | null>(null);
+  const [uploadedVideoUrl, setUploadedVideoUrl] = useState<string | null>(null);
+  const [currentFrameStats, setCurrentFrameStats] = useState<{
+    cars: number;
+    bikes: number;
+    trucks: number;
+    buses: number;
+    total: number;
+    second: number;
+  } | null>(null);
+  const [isVideoFinished, setIsVideoFinished] = useState<boolean>(false);
+  const [isPlaying, setIsPlaying] = useState<boolean>(true);
+  const videoPlayerRef = useRef<HTMLVideoElement | null>(null);
+  const canvasOverlayRef = useRef<HTMLCanvasElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const { addToast } = useToast();
+
+  // Draw bounding boxes on video frame in real time
+  const handleVideoTimeUpdate = (currentTime: number) => {
+    if (!detectionResult || !detectionResult.timeline || detectionResult.timeline.length === 0) return;
+    const canvas = canvasOverlayRef.current;
+    const video = videoPlayerRef.current;
+    if (!canvas || !video) return;
+
+    if (canvas.width !== video.clientWidth || canvas.height !== video.clientHeight) {
+      canvas.width = video.clientWidth;
+      canvas.height = video.clientHeight;
+    }
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Find nearest timeline sample to current video playback second
+    let nearest = detectionResult.timeline[0];
+    let minDiff = Math.abs(nearest.second - currentTime);
+    for (const s of detectionResult.timeline) {
+      const diff = Math.abs(s.second - currentTime);
+      if (diff < minDiff) {
+        minDiff = diff;
+        nearest = s;
+      }
+    }
+
+    setCurrentFrameStats({
+      cars: nearest.cars,
+      bikes: nearest.bikes,
+      trucks: nearest.trucks,
+      buses: nearest.buses,
+      total: nearest.vehicles,
+      second: nearest.second,
+    });
+
+    const boxes = (nearest as any).boxes || [];
+    boxes.forEach((b: any) => {
+      const [nx1, ny1, nx2, ny2] = b.box;
+      const x = nx1 * canvas.width;
+      const y = ny1 * canvas.height;
+      const w = (nx2 - nx1) * canvas.width;
+      const h = (ny2 - ny1) * canvas.height;
+
+      const color = b.class === 'car' ? '#06b6d4' :
+                    b.class === 'bike' ? '#10b981' :
+                    b.class === 'truck' ? '#f59e0b' : '#a855f7';
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2.5;
+      ctx.strokeRect(x, y, w, h);
+
+      const label = `${b.class.toUpperCase()} ${Math.round(b.confidence * 100)}%`;
+      ctx.font = 'bold 10px monospace';
+      const textWidth = ctx.measureText(label).width;
+      ctx.fillStyle = color;
+      ctx.fillRect(x, Math.max(0, y - 16), textWidth + 8, 16);
+      ctx.fillStyle = '#000000';
+      ctx.fillText(label, x + 4, Math.max(12, y - 4));
+    });
+  };
+
+  const handleVideoEnded = () => {
+    setIsVideoFinished(true);
+    setIsPlaying(false);
+    addToast({
+      type: 'info',
+      category: 'traffic',
+      title: 'Full Video Analysis Complete',
+      message: `Complete video processed! Final traffic count for ${selectedArea}: ${detectionResult?.total_vehicles} vehicles (${detectionResult?.traffic_percentage}% congestion). Saved to system.`,
+    });
+  };
 
   // Fetch initial YOLO service status
   useEffect(() => {
@@ -269,6 +355,13 @@ export default function TrafficAI({ trafficData, alerts }: TrafficPageProps) {
   // File Upload Handler for AI Traffic Detection
   const handleFileUpload = async (file: File) => {
     if (!file) return;
+    if (file.type.startsWith('video/') || file.name.match(/\.(mp4|avi|mov|mkv|webm)$/i)) {
+      setUploadedVideoUrl(URL.createObjectURL(file));
+      setIsVideoFinished(false);
+      setIsPlaying(true);
+    } else {
+      setUploadedVideoUrl(null);
+    }
     setUploading(true);
     setUploadProgress(15);
 
@@ -528,22 +621,91 @@ export default function TrafficAI({ trafficData, alerts }: TrafficPageProps) {
             </div>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_1fr]">
-              {/* Annotated Preview Box */}
-              <div className="relative overflow-hidden rounded-xl border bg-black/90 aspect-video flex items-center justify-center" style={{ borderColor: 'var(--t-border)' }}>
-                {detectionResult.annotated_preview ? (
-                  <img
-                    src={detectionResult.annotated_preview}
-                    alt="AI Annotated Output"
-                    className="h-full w-full object-contain"
+              {/* Video Player or Annotated Image Preview Box */}
+              {detectionResult.media_type === 'video' && uploadedVideoUrl ? (
+                <div className="relative overflow-hidden rounded-xl border bg-black aspect-video flex items-center justify-center group" style={{ borderColor: 'var(--t-border)' }}>
+                  <video
+                    ref={videoPlayerRef}
+                    src={uploadedVideoUrl}
+                    className="w-full h-full object-contain"
+                    playsInline
+                    autoPlay
+                    onTimeUpdate={(e) => handleVideoTimeUpdate(e.currentTarget.currentTime)}
+                    onEnded={handleVideoEnded}
+                    onPlay={() => setIsPlaying(true)}
+                    onPause={() => setIsPlaying(false)}
                   />
-                ) : (
-                  <div className="text-xs text-slate-400">Preview rendering unavailable</div>
-                )}
-                <div className="absolute top-2 left-2 flex items-center gap-1.5 rounded-lg bg-black/70 px-2.5 py-1 text-[11px] font-mono text-cyan-300">
-                  <Cpu size={12} />
-                  <span>Real-Time Edge Neural Detection</span>
+                  <canvas
+                    ref={canvasOverlayRef}
+                    className="absolute inset-0 w-full h-full pointer-events-none"
+                  />
+
+                  {/* Top HUD with real-time detection counters */}
+                  <div className="absolute top-2 left-2 flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 rounded-lg bg-black/80 px-2.5 py-1 text-[11px] font-mono text-cyan-300 backdrop-blur-md border border-cyan-500/30">
+                      <Cpu size={12} className="text-cyan-400 animate-spin" />
+                      <span>Full Video Neural Tracking</span>
+                    </div>
+                    {currentFrameStats && (
+                      <div className="flex items-center gap-1.5 rounded-lg bg-black/80 px-2.5 py-1 text-[11px] font-mono text-emerald-400 backdrop-blur-md border border-emerald-500/30">
+                        <span>Current Frame: {currentFrameStats.total}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Bottom Video Controls & Status */}
+                  <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/95 via-black/60 to-transparent p-2.5 flex items-center justify-between text-xs text-white">
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        onClick={() => {
+                          if (videoPlayerRef.current) {
+                            if (isPlaying) {
+                              videoPlayerRef.current.pause();
+                            } else {
+                              videoPlayerRef.current.play();
+                            }
+                          }
+                        }}
+                        className="p-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white transition cursor-pointer"
+                        title={isPlaying ? 'Pause' : 'Play'}
+                      >
+                        {isPlaying ? <Pause size={13} /> : <Play size={13} />}
+                      </button>
+                      <span className="font-mono text-[11px] text-slate-300">
+                        {currentFrameStats ? `${currentFrameStats.second.toFixed(1)}s` : '0.0s'} / {detectionResult.duration_seconds}s
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {isVideoFinished ? (
+                        <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-emerald-500/30 text-emerald-300 border border-emerald-500/40">
+                          ✓ Finished & Logged
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 animate-pulse">
+                          ● Scanning Video Flow
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="relative overflow-hidden rounded-xl border bg-black/90 aspect-video flex items-center justify-center" style={{ borderColor: 'var(--t-border)' }}>
+                  {detectionResult.annotated_preview ? (
+                    <img
+                      src={detectionResult.annotated_preview}
+                      alt="AI Annotated Output"
+                      className="h-full w-full object-contain"
+                    />
+                  ) : (
+                    <div className="text-xs text-slate-400">Preview rendering unavailable</div>
+                  )}
+                  <div className="absolute top-2 left-2 flex items-center gap-1.5 rounded-lg bg-black/70 px-2.5 py-1 text-[11px] font-mono text-cyan-300">
+                    <Cpu size={12} />
+                    <span>Neural Vehicle Detection</span>
+                  </div>
+                </div>
+              )}
 
               {/* Classification Metrics */}
               <div className="flex flex-col justify-between gap-3">
@@ -568,7 +730,7 @@ export default function TrafficAI({ trafficData, alerts }: TrafficPageProps) {
 
                 {detectionResult.media_type === 'video' && detectionResult.timeline && (
                   <div className="rounded-xl border p-2.5" style={{ borderColor: 'var(--t-border)', background: 'var(--t-bg-elevated)' }}>
-                    <div className="text-[10px] uppercase font-bold text-slate-500 mb-1">Video Flow Over Time ({detectionResult.duration_seconds}s)</div>
+                    <div className="text-[10px] uppercase font-bold text-slate-500 mb-1">Video Flow Timeline ({detectionResult.duration_seconds}s Full Duration)</div>
                     <div className="h-16 w-full">
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={detectionResult.timeline}>
@@ -576,6 +738,39 @@ export default function TrafficAI({ trafficData, alerts }: TrafficPageProps) {
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
+                  </div>
+                )}
+
+                {/* Final Result Notification Banner when Video completes */}
+                {detectionResult.media_type === 'video' && isVideoFinished && (
+                  <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-7 w-7 rounded-lg bg-emerald-500/20 text-emerald-500 flex items-center justify-center font-bold text-sm">
+                        ✓
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                          Full Video Analysis Finished — Final Result for {detectionResult.area || selectedArea}
+                        </div>
+                        <p className="text-[10px] text-slate-600 dark:text-slate-300">
+                          All vehicles across the complete video duration: <strong>{detectionResult.total_vehicles} total vehicles</strong> ({detectionResult.traffic_percentage}% Congestion • {detectionResult.traffic_level.toUpperCase()}).
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        if (videoPlayerRef.current) {
+                          videoPlayerRef.current.currentTime = 0;
+                          videoPlayerRef.current.play();
+                          setIsVideoFinished(false);
+                          setIsPlaying(true);
+                        }
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <RefreshCw size={11} />
+                      <span>Replay</span>
+                    </button>
                   </div>
                 )}
 
