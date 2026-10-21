@@ -177,32 +177,16 @@ app.post("/flood", async (req, res) => {
     let supabaseSaved = false;
     if (supabase) {
       try {
-        // Attempt to update existing area record first
-        const { data: updatedRows, error: updateError } = await supabase
+        const { data: upsertData, error: upsertError } = await supabase
           .from("flood_data")
-          .update(record)
-          .eq("area_name", areaName)
+          .upsert(record, { onConflict: "area_name" })
           .select();
 
-        if (updateError) {
-          console.warn("[Supabase] Update notice:", updateError.message);
-        }
-
-        if (updatedRows && updatedRows.length > 0) {
-          console.log(`[Supabase] Updated existing record for ${areaName}`);
-          supabaseSaved = true;
+        if (upsertError) {
+          console.error("[Supabase] Upsert error:", upsertError.message);
         } else {
-          // If no row existed for this area yet, insert it
-          const { error: insertError } = await supabase
-            .from("flood_data")
-            .insert([record]);
-
-          if (insertError) {
-            console.error("[Supabase] Insert error:", insertError.message);
-          } else {
-            console.log(`[Supabase] Inserted new record for ${areaName}`);
-            supabaseSaved = true;
-          }
+          console.log(`[Supabase] Telemetry synced for ${areaName} (Level: ${waterLevel} cm, Severity: ${severity})`);
+          supabaseSaved = true;
         }
       } catch (sbErr) {
         console.error("[Supabase] Execution error:", sbErr.message);
